@@ -2758,3 +2758,25 @@ Texto completo, sin cambios, de la sección "Estado actual" de `CLAUDE.md` hasta
   - `proveedores_productos.build_sales_cost_view` compara el primer mes **con costo** contra el último (antes, el primer mes vendido): costo, precio, margen y `margin_change` en puntos. Estados: subió el costo (no el precio / y el precio), bajó el costo (no el precio / y el precio), cambió el precio; sin costo, `state` = None. `margin_changes(products, puntos)` deja los que se movieron `MARGIN_MIN_POINTS` (3) o más y aparta los de margen < `MARGIN_IMPOSSIBLE` (−50 %: costo por caja contra venta por unidad).
   - Página: umbral editable (`?puntos=`), margen "antes → después" con los puntos, orden por el cambio más grande, columna "Mail" y la tarjeta "Mail a Rick": arma asunto y texto en inglés con los tildados, agrupados por estado (de entrada, los de costo cambiado y precio igual), con "Copiar" y "Abrir en el mail" (`mailto:` sin destinatario). No manda nada.
   - Con jun-sep (datos al 22/10): 84 de 838 productos con costo cambiaron 3 puntos o más (24 subió el costo sin el precio, 15 subieron los dos, 4 bajó el costo sin el precio, 41 cambió el precio); 24 apartados por margen imposible. El mail de entrada lleva 17: 15 con costo en suba y el mismo precio (Chevron 20W50 41,0 % → 30,4 %, On! 8 mg 16,8 % → 6,5 %, ...) y las dos Arizona Hard con costo en baja (30,8 % → 57,0 % y 45,1 % → 57,0 %).
+
+## 2026-10-26 a 29: chat Bradenton3 (Reportes, Proyecciones, Control Cierre, Kia y Toyota)
+
+- **Push y estado**: subidos a dev los 4 pedidos del 26/10 y todo lo de abajo (último push `fdaa4c0`). Alfonso pide cada commit y cada push.
+- **Proyecciones** (pedidos de la jefa de Alfonso, en varias vueltas):
+  - Panel resumen con Combustible y C-Store lado a lado (hasta hoy y proyectado), con un ícono para cada unidad (surtidor azul, tienda naranja). Se sacaron "del Balance", las tablas día por día y la nota de C-Store por rubro.
+  - Gráficos con Chart.js 4.4.1 (`static/vendor/chart.umd.min.js`): indicadores que suben animados, torta de utilidad por unidad, el mes día por día (lo que falta, en gris), y mes a mes desde el Balance guardado (por galón, galones y ventas, con filtro de 6/12/24 meses o todo). Las animaciones van aunque Windows tenga apagados los efectos (`prefers-reduced-motion`; en la PC de la oficina están apagados), a 1,2 s.
+  - Ya no está en Reportes: tiene su dirección `/proyecciones` (las viejas redirigen; el endpoint sigue siendo `reportes_proyecciones`) y se entra por el botón "Panel de proyecciones" de la barra de arriba, al lado del usuario.
+  - En producción, la historia mes a mes aparece recién cuando un admin sube el Bce (por ejemplo, `Bce Brandenton 30-09-26.xlsx`, 47 meses) en "Control contra el Balance".
+- **Reportes**: lavanda gris `#7A6BB0` en vez del violeta. Un solo período (mes y año) arriba para todos los PDF, en tarjetas iguales.
+- **Carga de Datos y Controles**: tarjetas del mismo tamaño (`tool-grid-even`, 96 px, nombre en una línea y descripción en dos).
+- **Control Cierre** (`6959d33`):
+  - Los asientos llevan el nombre de Ratio (Libro Diario): "LIQUIDACION CIERRE RECAUDACION MM-AAAA", "COBRO GETTEL-KIA MES" y "DEV SALE TAX POR C-STORE MM-AAAA" (`control_cierre.entry_titles`).
+  - El PDF trae todo lo de la página: estado, asientos, Sale Tax, tarjetas contra J.H. y cruce. Es el único control con PDF del mes entero.
+  - El cruce ya no dice "del POS".
+- **Depósitos de septiembre**: no hay error. El Excel (CAJA, columna CHASE) suma $77,086, que son los depósitos normales de Chase, con el de $2,550 sin recibo. El total del control suma $77,162: los recibos de los tres tipos (+ $2,000 de Food Truck + $626 de Ice) sin el de $2,550.
+- **Kia y Toyota** (`fdaa4c0`):
+  - Controles → Kia y Toyota tiene "Cierre de {mes}" (`cuenta_kia_toyota.month_closing`): por empresa, los vales, el rebate (−$0.02/gal), el 3% y el total a cobrar; los pagos de cada una, el saldo anterior y el pendiente; y los asientos de Ratio "REBATE GETTEL MES AAAA" (Gettel KIA a 4.07, recargo + rebate sin redondear en el medio) y "COBRO GETTEL-KIA MES" (J.H. a Gettel KIA, el LOCAL ACCT cobrado). Coinciden con Ratio al centavo en julio, agosto y septiembre. En junio no hay asiento REBATE en Ratio.
+  - Hoja PAGO del Cierre: separada en Toyota (A-G) y Kia (I-O), en Cierre 09-26 y 10-26 del Drive. Se hizo con Excel (PowerShell COM) sobre copias, con respaldo en `Claude outputs\respaldos\`. El saldo anterior de cada empresa es un valor encadenado (31/08: Toyota 486.56, Kia 2,109.53; 30/09: Toyota −1,643.31, Kia 1,671.63). Ya no se usa la hoja de días pendientes, que era la misma para las dos.
+  - Se cargó Pagos5 (Kia) del 01/09: 8 recibos, 2170-2177, $7,241.89, que el manager no había mandado (lo encontró el chat "Skill Trabajo 14").
+  - El importador de Cierre lee los dos cuadros. Con los 20 Cierre de 01-25 a 08-26 da igual que antes.
+  - En la skill `ratio-facturas`: `pago_cupones_xml.py` manda cada pago al cuadro de su empresa y `controles.md` §2 tiene el formato nuevo.
