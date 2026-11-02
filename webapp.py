@@ -145,6 +145,7 @@ from reporte_diario import (
     real_store_info_total_sales,
 )
 import proyecciones
+import proyecciones_neta
 import fisico
 import fisico_db
 import fisico_invoice_parser
@@ -1776,16 +1777,38 @@ def reportes_gettel_pdf():
 # se entra por el botón "Panel de proyecciones" de la barra de arriba (el
 # endpoint conserva el nombre). La cuenta vive en proyecciones.py. Los % de
 # cada rubro y el Balance del mes cerrado los carga solo un admin.
-@app.route("/proyecciones")
-def reportes_proyecciones():
+def _proyecciones_month():
     today = date.today()
     year = request.args.get("year", type=int) or today.year
     month = request.args.get("month", type=int) or today.month
     if not (1 <= month <= 12):
         month = today.month
+    return year, month
+
+
+@app.route("/proyecciones")
+def reportes_proyecciones():
+    year, month = _proyecciones_month()
+    projection = proyecciones.build_projection(year, month)
     return render_template(
         "reportes_proyecciones.html",
-        projection=proyecciones.build_projection(year, month),
+        projection=projection,
+        net=proyecciones_neta.build_net(year, month, projection),
+        accent="#7A6BB0",
+        accent_soft="#F1EFF8",
+        **_month_nav(year, month),
+    )
+
+
+# El desglose de la utilidad neta: se entra tocando "Utilidad neta
+# proyectada" (pedido del usuario, 2026-11-02). La cuenta vive en
+# proyecciones_neta.py.
+@app.route("/proyecciones/utilidad-neta")
+def proyecciones_utilidad_neta():
+    year, month = _proyecciones_month()
+    return render_template(
+        "proyecciones_neta.html",
+        net=proyecciones_neta.build_net(year, month),
         accent="#7A6BB0",
         accent_soft="#F1EFF8",
         **_month_nav(year, month),

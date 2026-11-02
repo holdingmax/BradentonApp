@@ -5,6 +5,7 @@
 {% macro money(v, d=2) %}{% if v is none %}—{% elif v < 0 %}−${{ ("{:,.%df}" % d).format(-v) }}{% else %}${{ ("{:,.%df}" % d).format(v) }}{% endif %}{% endmacro %}
 {% macro num(v, d=2) %}{% if v is none %}—{% else %}{{ ("{:,.%df}" % d).format(v) }}{% endif %}{% endmacro %}
 {% macro pct(v) %}{% if v is none %}—{% else %}{{ "{:.1f}".format(v * 100) }} %{% endif %}{% endmacro %}
+{% macro pct0(v) %}{% if v is none %}—{% else %}{{ "{:.0f}".format(v * 100) }} %{% endif %}{% endmacro %}
 {# Íconos de cada unidad, a la izquierda de su título (pedido del usuario, 2026-10-27). #}
 {% macro icon_fuel() %}<svg class="proy-unit-icon proy-unit-icon-fuel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>{% endmacro %}
 {% macro icon_cstore() %}<svg class="proy-unit-icon proy-unit-icon-cstore" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0a3 3 0 0 0 6 0a3 3 0 0 0 6 0"/><path d="M5 11.5V21h14v-9.5"/><path d="M10 21v-5h4v5"/></svg>{% endmacro %}
@@ -48,49 +49,71 @@
 {% else %}
 
 {# ---------------- Resumen: las dos unidades de negocio lado a lado (pedido del usuario, 2026-10-26) ---------------- #}
+{# El C-Store suma la comisión real de Lottery, como la Nota 3 del Bce (pedido del usuario, 2026-11-02). #}
 {% set cs = p.cstore.balance %}
-{% set util_now = (p.fuel.utilidad + cs.utilidad) if p.fuel.utilidad is not none and cs.utilidad is not none else none %}
-{% set util_proj = (p.fuel_proj.utilidad + cs.utilidad_proj) if p.fuel_proj.utilidad is not none and cs.utilidad_proj is not none else none %}
+{% set cwl = p.cstore.with_lottery %}
+{% set lot = p.lottery %}
+{% set util_now = (p.fuel.utilidad + cwl.utilidad) if p.fuel.utilidad is not none and cwl.utilidad is not none else none %}
+{% set util_proj = (p.fuel_proj.utilidad + cwl.utilidad_proj) if p.fuel_proj.utilidad is not none and cwl.utilidad_proj is not none else none %}
+{% set split = p.split %}
+{# Un tono del naranja del C-Store por rubro, en el orden de split.cstore.parts (Lottery al final). #}
+{% set part_colors = ["#9A3412", "#C2410C", "#EB6834", "#F59E6B", "#FBC9A6"] %}
 
 {# ---------------- Gráficos (pedido del usuario, 2026-10-27) ---------------- #}
 <div class="proy-kpi-grid">
-  <div class="proy-kpi proy-kpi-hero">
-    <div class="proy-kpi-label">Utilidad proyectada</div>
-    <div class="proy-kpi-value" data-count="{{ util_proj or 0 }}">{{ money(util_proj, 0) }}</div>
-    <div class="proy-kpi-sub">hasta hoy {{ money(util_now, 0) }}</div>
-  </div>
+  {# La utilidad neta, y tocándola el desglose (pedido del usuario, 2026-11-02). #}
+  <a class="proy-kpi proy-kpi-hero proy-kpi-link" href="{{ url_for('proyecciones_utilidad_neta', year=year, month=month) }}">
+    <div class="proy-kpi-label">Utilidad neta proyectada <span class="proy-kpi-more">Ver desglose &rarr;</span></div>
+    <div class="proy-kpi-value" data-count="{{ net.net.proj or 0 }}">{{ money(net.net.proj, 0) }}</div>
+    <div class="proy-kpi-sub">bruta {{ money(net.gross.proj, 0) }} − gastos {{ money(net.expenses.proj, 0) }}</div>
+  </a>
   <div class="proy-kpi proy-kpi-fuel">
     <div class="proy-kpi-label">{{ icon_fuel() }}Combustible</div>
     <div class="proy-kpi-value" data-count="{{ p.fuel_proj.sales or 0 }}">{{ money(p.fuel_proj.sales, 0) }}</div>
     <div class="proy-kpi-sub">venta proyectada · {{ num(p.fuel_proj.gallons, 0) }} gal</div>
   </div>
-  <div class="proy-kpi proy-kpi-cstore">
+  {# Tocando el C-Store se baja al cuadro por rubro (pedido del usuario, 2026-11-02). #}
+  <a class="proy-kpi proy-kpi-cstore proy-kpi-link" href="#proy-cstore">
     <div class="proy-kpi-label">{{ icon_cstore() }}C-Store</div>
     <div class="proy-kpi-value" data-count="{{ cs.proj or 0 }}">{{ money(cs.proj, 0) }}</div>
     <div class="proy-kpi-sub">venta proyectada · margen {{ pct(cs.margin) }}</div>
-  </div>
+  </a>
 </div>
 
-<div class="proy-chart-row">
-  <div class="card proy-chart-card">
-    <h2>Utilidad proyectada</h2>
-    <div class="proy-chart proy-chart-donut"><canvas id="proy-donut" role="img" aria-label="Qué parte de la utilidad proyectada pone cada unidad"></canvas></div>
-    <div class="proy-legend proy-legend-center">
-      {% if util_proj %}
-      <span><i class="proy-sq proy-sq-fuel"></i>Combustible {{ money(p.fuel_proj.utilidad, 0) }} · {{ "{:.0f}".format(p.fuel_proj.utilidad / util_proj * 100) }} %</span>
-      <span><i class="proy-sq proy-sq-cstore"></i>C-Store {{ money(cs.utilidad_proj, 0) }} · {{ "{:.0f}".format(cs.utilidad_proj / util_proj * 100) }} %</span>
-      {% else %}<span>Sin PPP no se puede calcular la utilidad del combustible.</span>{% endif %}
+{# La utilidad bruta proyectada: el combustible solo y el C-Store abierto en sus rubros más
+   Lottery (pedido del usuario, 2026-11-02; el gráfico del mes día por día se sacó). #}
+<div class="card">
+  <h2>Utilidad bruta proyectada</h2>
+  {% if split %}
+  <div class="proy-split">
+    <div class="proy-chart proy-chart-donut"><canvas id="proy-donut" role="img" aria-label="Qué parte de la utilidad bruta proyectada pone el combustible y cada rubro del C-Store"></canvas></div>
+    <div class="proy-split-list">
+      <div class="proy-split-row proy-split-unit">
+        <span><i class="proy-sq proy-sq-fuel"></i>Combustible</span>
+        <strong>{{ money(split.fuel.value, 0) }}</strong>
+        <span class="proy-split-pct">{{ pct0(split.fuel.pct_total) }} del total</span>
+      </div>
+      <a class="proy-split-row proy-split-unit" href="#proy-cstore">
+        <span><i class="proy-sq proy-sq-cstore"></i>C-Store</span>
+        <strong>{{ money(split.cstore.value, 0) }}</strong>
+        <span class="proy-split-pct">{{ pct0(split.cstore.pct_total) }} del total</span>
+      </a>
+      {% for part in split.cstore.parts %}
+      <a class="proy-split-row proy-split-part" href="#proy-cstore">
+        <span><i class="proy-sq" style="background: {{ part_colors[loop.index0] }};"></i>{{ part.label }}</span>
+        <strong>{{ money(part.value, 0) }}</strong>
+        <span class="proy-split-pct">{{ pct(part.pct_cstore) }} del C-Store</span>
+      </a>
+      {% endfor %}
     </div>
   </div>
-  <div class="card proy-chart-card proy-chart-card-wide">
-    <h2>{{ month_name }} día por día</h2>
-    <div class="proy-legend">
-      <span><i class="proy-sq proy-sq-fuel"></i>Combustible</span>
-      <span><i class="proy-sq proy-sq-cstore"></i>C-Store</span>
-      {% if p.days_loaded < p.days_in_month %}<span><i class="proy-sq proy-sq-proj"></i>Lo que falta, al ritmo de hoy</span>{% endif %}
-    </div>
-    <div class="proy-chart"><canvas id="proy-daily" role="img" aria-label="Venta de cada día del mes, combustible y C-Store apilados"></canvas></div>
-  </div>
+  <p class="muted proy-note">
+    Total {{ money(split.total, 0) }}. Lottery es la comisión real de las semanas que se pagan en el mes, no lo vendido.
+    Kia / Toyota no entra: es combustible a cuenta, no ganancia.
+  </p>
+  {% else %}
+  <p class="muted" style="margin: 0;">Sin PPP no se puede calcular la utilidad del combustible.</p>
+  {% endif %}
 </div>
 
 <div class="card" id="proy-history-card">
@@ -144,17 +167,18 @@
       <div class="proy-sum-table">
         <span></span><span class="proy-sum-head">Hasta hoy</span><span class="proy-sum-head proy-sum-head-proj">Proyectado</span>
         <span>Venta</span><strong>{{ money(cs.amount, 0) }}</strong><strong class="proy-sum-proj">{{ money(cs.proj, 0) }}</strong>
-        <span>Utilidad</span><strong>{{ money(cs.utilidad, 0) }}</strong><strong class="proy-sum-proj">{{ money(cs.utilidad_proj, 0) }}</strong>
+        <span>Utilidad de los rubros</span><strong>{{ money(cs.utilidad, 0) }}</strong><strong class="proy-sum-proj">{{ money(cs.utilidad_proj, 0) }}</strong>
+        <span>Comisión Lottery</span><strong>{{ money(lot.comm, 0) }}</strong><strong class="proy-sum-proj">{{ money(lot.comm_proj, 0) }}</strong>
+        <span>Utilidad</span><strong>{{ money(cwl.utilidad, 0) }}</strong><strong class="proy-sum-proj">{{ money(cwl.utilidad_proj, 0) }}</strong>
         <span>Margen</span><strong>{{ pct(cs.margin) }}</strong><span></span>
-        <span class="proy-sum-aside">Con Lotto y Kia / Toyota</span><span class="proy-sum-aside proy-sum-aside-num">{{ money(p.cstore.total.amount, 0) }}</span><span class="proy-sum-aside proy-sum-aside-num">{{ money(p.cstore.total.proj, 0) }}</span>
       </div>
     </div>
   </div>
   <div class="proy-sum-band">
-    <span>Utilidad de las dos unidades</span>
+    <span>Utilidad bruta de las dos unidades</span>
     <span>
       Hasta hoy <strong>{{ money(util_now, 0) }}</strong> · Proyectada <strong class="proy-sum-proj">{{ money(util_proj, 0) }}</strong>
-      {% if util_proj %} · Combustible {{ "{:.0f}".format(p.fuel_proj.utilidad / util_proj * 100) }} % / C-Store {{ "{:.0f}".format(cs.utilidad_proj / util_proj * 100) }} %{% endif %}
+      {% if split %} · Combustible {{ pct0(split.fuel.pct_total) }} / C-Store {{ pct0(split.cstore.pct_total) }}{% endif %}
     </span>
   </div>
 </div>
@@ -191,7 +215,7 @@
 </div>
 
 {# ---------------- C-Store ---------------- #}
-<div class="card">
+<div class="card" id="proy-cstore">
   <h2 class="proy-unit-title">{{ icon_cstore() }}C-Store por rubro</h2>
   <form method="post" action="{{ url_for('reportes_proyecciones_margenes') }}">
     <input type="hidden" name="year" value="{{ year }}">
@@ -203,6 +227,27 @@
         </thead>
         <tbody>
           {% for r in p.cstore.rubros %}
+          {% if r.label == "Gettel" %}
+          {# Kia / Toyota es combustible a cuenta: se ve lo vendido, pero no es ganancia. #}
+          <tr class="proy-row-aside">
+            <td>{{ r.display }} <span class="proy-th-sub">no es ganancia</span></td>
+            <td>{{ money(r.amount) }}</td>
+            <td>—</td>
+            <td>—</td>
+            <td class="proy-cell-proj">{{ money(r.proj) }}</td>
+            <td class="proy-cell-proj">—</td>
+          </tr>
+          {% elif r.lottery %}
+          {# Lottery: la comisión real de las semanas que se pagan en el mes, y su % sobre lo vendido. #}
+          <tr>
+            <td>{{ r.display }} <span class="proy-th-sub">comisión real</span></td>
+            <td>{{ money(r.amount) }}</td>
+            <td>{{ pct(r.margin) }}</td>
+            <td>{{ money(r.utilidad) }}</td>
+            <td class="proy-cell-proj">{{ money(r.proj) }}</td>
+            <td class="proy-cell-proj">{{ money(r.utilidad_proj) }}</td>
+          </tr>
+          {% else %}
           <tr class="{{ '' if r.in_balance else 'proy-row-aside' }}">
             <td>{{ r.display }}</td>
             <td>{{ money(r.amount) }}</td>
@@ -215,8 +260,9 @@
             <td class="proy-cell-proj">{{ money(r.proj) }}</td>
             <td class="proy-cell-proj">{{ money(r.utilidad_proj) }}</td>
           </tr>
+          {% endif %}
           {% endfor %}
-          {% for title, block in [("C-Store", p.cstore.balance), ("Total con Lotto y Kia / Toyota", p.cstore.total)] %}
+          {% for title, block in [("C-Store", p.cstore.balance), ("C-Store con Lottery", cwl)] %}
           <tr class="reporte-totals-row">
             <td>{{ title }}</td>
             <td>{{ money(block.amount) }}</td>
@@ -231,6 +277,15 @@
     </div>
     {% if is_admin %}<div class="proy-actions"><button type="submit">Guardar %</button></div>{% endif %}
   </form>
+  <p class="muted proy-note">
+    {% if lot.estimated %}
+    Lottery: todavía no hay comisiones cargadas de las semanas del mes, así que va la venta de LOTTO por su % teórico.
+    {% else %}
+    Lottery: la comisión real (On-Line + Skoff) de las semanas que se pagan a Chase en el mes, del {{ lot.first.strftime('%d/%m') }} al {{ lot.last.strftime('%d/%m') }}
+    ({{ lot.days_loaded }} de {{ lot.days_total }} días cargados), como el Excel de Lottery y la cuenta 4.10 del Bce. La última semana de un mes que se paga en el siguiente cuenta en el siguiente.
+    Del 27/07 al 11/10/2026 la comisión fue el 5,97 % de lo vendido; por semana varía de 3 % a 7 % porque la de Skoff se cobra sobre los libros liquidados.
+    {% endif %}
+  </p>
 </div>
 {% endif %}
 
@@ -327,16 +382,28 @@
   .proy-kpi-value { font-size: 28px; font-weight: 700; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
   .proy-kpi-sub { font-size: 12.5px; color: var(--text-soft); }
   .proy-kpi-hero .proy-kpi-label, .proy-kpi-hero .proy-kpi-sub { color: rgba(255, 255, 255, 0.85); }
+  .proy-kpi-link { display: block; text-decoration: none; color: inherit; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+  .proy-kpi-link:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.10); }
+  .proy-kpi-hero.proy-kpi-link { color: #fff; }
+  .proy-kpi-more { margin-left: auto; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; opacity: 0.9; }
+  #proy-cstore { scroll-margin-top: 80px; }
+  .proy-split { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 24px; align-items: center; }
+  @media (max-width: 700px) { .proy-split { grid-template-columns: minmax(0, 1fr); } }
+  .proy-split-list { display: flex; flex-direction: column; gap: 2px; }
+  .proy-split-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 120px; gap: 12px; align-items: baseline; padding: 6px 10px; border-radius: 8px; text-decoration: none; color: inherit; font-size: 13.5px; }
+  .proy-split-row span:first-child { display: inline-flex; align-items: center; gap: 8px; }
+  .proy-split-row strong { text-align: right; font-variant-numeric: tabular-nums; }
+  .proy-split-pct { text-align: right; font-size: 12.5px; color: var(--text-soft); }
+  .proy-split-unit { font-weight: 700; }
+  .proy-split-part { padding-left: 28px; }
+  a.proy-split-row:hover { background: var(--surface-alt); }
 
-  .proy-chart-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 18px; }
-  @media (max-width: 900px) { .proy-chart-row { grid-template-columns: minmax(0, 1fr); } }
   .proy-chart { position: relative; height: 240px; }
   .proy-chart-donut { height: 200px; }
   .proy-chart-tall { height: 280px; }
   .proy-chart-small { height: 150px; }
   .proy-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--text-soft); margin: 4px 0 10px; }
   .proy-legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .proy-legend-center { justify-content: center; margin-top: 12px; }
   .proy-sq { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
   .proy-sq-fuel { background: #2A78D6; }
   .proy-sq-cstore { background: #EB6834; }
@@ -426,34 +493,25 @@
     requestAnimationFrame(step);
   });
 
-  const split = data.utilidad_split;
-  if (split.fuel != null && split.cstore != null) {
+  // La torta: el combustible y cada rubro del C-Store. Tocando un rubro se
+  // baja al cuadro "C-Store por rubro".
+  const split = data.split;
+  if (split) {
+    const parts = split.cstore.parts;
+    const colors = {{ part_colors|tojson }};
     new Chart(document.getElementById("proy-donut"), {
       type: "doughnut",
-      data: { labels: ["Combustible", "C-Store"], datasets: [{ label: "Utilidad", data: [split.fuel, split.cstore], backgroundColor: [FUEL, CSTORE], borderColor: "#fff", borderWidth: 3 }] },
-      options: { responsive: true, maintainAspectRatio: false, cutout: "66%", plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.label + ": " + money(c.raw) } } } },
+      data: {
+        labels: ["Combustible"].concat(parts.map(x => x.label)),
+        datasets: [{ label: "Utilidad", data: [split.fuel.value].concat(parts.map(x => x.value)), backgroundColor: [FUEL].concat(colors.slice(0, parts.length)), borderColor: "#fff", borderWidth: 2 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: "62%",
+        onClick: (e, items) => { if (items.length && items[0].index > 0) document.getElementById("proy-cstore").scrollIntoView({ behavior: "smooth" }); },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.label + ": " + money(c.raw) + " · " + Math.round(c.raw / split.total * 100) + " %" } } },
+      },
     });
   }
-
-  const daily = data.daily;
-  new Chart(document.getElementById("proy-daily"), {
-    type: "bar",
-    data: {
-      labels: daily.map(d => d.day),
-      datasets: [
-        { label: "Combustible", data: daily.map(d => d.fuel), backgroundColor: FUEL, stack: "s", maxBarThickness: 22 },
-        { label: "C-Store", data: daily.map(d => d.cstore), backgroundColor: CSTORE, stack: "s", maxBarThickness: 22, borderRadius: { topLeft: 3, topRight: 3 } },
-        { label: "Al ritmo de hoy", data: daily.map(d => d.proj), backgroundColor: PROJ, stack: "s", maxBarThickness: 22, borderRadius: { topLeft: 3, topRight: 3 } },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      animation: { delay: c => (c.type === "data" && c.mode === "default" ? c.dataIndex * 30 : 0) },
-      interaction: { mode: "index", intersect: false },
-      plugins: { legend: { display: false }, tooltip: tip(money) },
-      scales: axes(thousands),
-    },
-  });
 
   // Mes a mes: la historia del Balance más el mes elegido proyectado. El
   // filtro de meses rehace los tres gráficos.

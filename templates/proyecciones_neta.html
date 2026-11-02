@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block main_class %}main-full{% endblock %}
+{% block content %}
+{% from "_month_jump.html" import month_jump %}
+{% macro money(v, d=2) %}{% if v is none %}—{% elif v < 0 %}−${{ ("{:,.%df}" % d).format(-v) }}{% else %}${{ ("{:,.%df}" % d).format(v) }}{% endif %}{% endmacro %}
+{% macro neg(v, d=2) %}{% if v is none %}—{% else %}{{ money(-v, d) }}{% endif %}{% endmacro %}
+{% set n = net %}
+{% set cols = 5 if n.has_bce else 4 %}
+
+{# El desglose de la utilidad neta proyectada (pedido del usuario, 2026-11-02): los renglones del
+   "ESTADO RESULTADO" del Bce, cada uno con lo que se cargó hasta hoy, cómo cerraría el mes y,
+   si el mes ya tiene Bce, lo real. La cuenta vive en proyecciones_neta.py. #}
+<div class="page-header">
+  <span class="eyebrow">Panel de proyecciones</span>
+  <h1>Utilidad neta</h1>
+  <p class="page-subtitle">
+    La utilidad bruta menos todos los gastos del mes, renglón por renglón como el Estado de Resultado del Bce,
+    con lo que se va cargando día a día en Chase, Caja, Cupones y Lottery.
+  </p>
+</div>
+
+<div class="card">
+  <div class="historial-nav">
+    <a href="{{ url_for('proyecciones_utilidad_neta', year=prev_year, month=prev_month) }}" class="btn-secondary historial-nav-btn">&larr; Mes anterior</a>
+    <div class="historial-nav-title">
+      {{ month_jump('proyecciones_utilidad_neta', year, month) }}
+      <a href="{{ url_for('reportes_proyecciones', year=year, month=month) }}" class="muted">Volver a Proyecciones</a>
+    </div>
+    <a href="{{ url_for('proyecciones_utilidad_neta', year=next_year, month=next_month) }}" class="btn-secondary historial-nav-btn">Mes siguiente &rarr;</a>
+  </div>
+</div>
+
+<div class="neta-kpi-grid">
+  <div class="neta-kpi">
+    <div class="neta-kpi-label">Utilidad bruta proyectada</div>
+    <div class="neta-kpi-value">{{ money(n.gross.proj, 0) }}</div>
+    <div class="neta-kpi-sub">hasta hoy {{ money(n.gross.actual, 0) }}{% if n.has_bce %} · Bce {{ money(n.gross.bce, 0) }}{% endif %}</div>
+  </div>
+  <div class="neta-kpi">
+    <div class="neta-kpi-label">Gastos proyectados</div>
+    <div class="neta-kpi-value">{{ neg(n.expenses.proj, 0) }}</div>
+    <div class="neta-kpi-sub">hasta hoy {{ neg(n.expenses.actual, 0) }}{% if n.has_bce %} · Bce {{ neg(n.expenses.bce, 0) }}{% endif %}</div>
+  </div>
+  <div class="neta-kpi neta-kpi-hero">
+    <div class="neta-kpi-label">Utilidad neta proyectada</div>
+    <div class="neta-kpi-value">{{ money(n.net.proj, 0) }}</div>
+    <div class="neta-kpi-sub">hasta hoy {{ money(n.net.actual, 0) }}{% if n.has_bce %} · Bce {{ money(n.net.bce, 0) }}{% endif %}</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Desglose</h2>
+  {% if n.ppp_missing %}
+  <p class="neta-warn">Sin PPP no se puede calcular la utilidad del combustible: falta el inventario inicial o las facturas del mes en Físico.</p>
+  {% endif %}
+  <div class="historial-table-wrap">
+    <table class="historial-table neta-table">
+      <thead>
+        <tr>
+          <th>Renglón</th><th class="neta-col-src">De dónde sale</th><th>Hasta hoy</th><th>Proyectado</th>
+          {% if n.has_bce %}<th>Real (Bce)</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="neta-section"><td colspan="{{ cols }}">Utilidad bruta</td></tr>
+        {% for g in n.gross_groups %}
+        <tr class="neta-group">
+          <td>{% if g.key == "cstore" %}<a href="{{ url_for('reportes_proyecciones', year=year, month=month) }}#proy-cstore">{{ g.title }}</a>{% else %}{{ g.title }}{% endif %}</td>
+          <td class="neta-col-src"></td>
+          <td>{{ money(g.actual) }}</td>
+          <td class="neta-proj">{{ money(g.proj) }}</td>
+          {% if n.has_bce %}<td>{{ money(g.bce) }}</td>{% endif %}
+        </tr>
+        {% for ln in g.lines %}
+        <tr class="neta-line">
+          <td>{{ ln.label }}</td>
+          <td class="neta-col-src">{{ ln.source }}</td>
+          <td>{{ money(ln.actual) }}</td>
+          <td class="neta-proj">{{ money(ln.proj) }}</td>
+          {% if n.has_bce %}<td></td>{% endif %}
+        </tr>
+        {% endfor %}
+        {% endfor %}
+        <tr class="neta-total">
+          <td>Utilidad bruta</td><td class="neta-col-src"></td>
+          <td>{{ money(n.gross.actual) }}</td>
+          <td class="neta-proj">{{ money(n.gross.proj) }}</td>
+          {% if n.has_bce %}<td>{{ money(n.gross.bce) }}</td>{% endif %}
+        </tr>
+
+        <tr class="neta-section"><td colspan="{{ cols }}">Gastos</td></tr>
+        {% for ln in n.expenses.lines %}
+        <tr class="neta-line">
+          <td>{{ ln.label }}</td>
+          <td class="neta-col-src">{{ ln.source }}</td>
+          <td>{{ neg(ln.actual) }}</td>
+          <td class="neta-proj">{{ neg(ln.proj) }}</td>
+          {% if n.has_bce %}<td>{{ neg(ln.bce) }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+        <tr class="neta-total">
+          <td>Total de gastos</td><td class="neta-col-src"></td>
+          <td>{{ neg(n.expenses.actual) }}</td>
+          <td class="neta-proj">{{ neg(n.expenses.proj) }}</td>
+          {% if n.has_bce %}<td>{{ neg(n.expenses.bce) }}</td>{% endif %}
+        </tr>
+
+        <tr class="neta-net">
+          <td>Utilidad neta</td><td class="neta-col-src"></td>
+          <td>{{ money(n.net.actual) }}</td>
+          <td>{{ money(n.net.proj) }}</td>
+          {% if n.has_bce %}<td>{{ money(n.net.bce) }}</td>{% endif %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted neta-note">
+    Cargado: Close Store hasta el {{ n.last_store_day.strftime('%d/%m/%Y') if n.last_store_day else "—" }} y Chase hasta el {{ n.last_chase_day.strftime('%d/%m/%Y') if n.last_chase_day else "—" }}.
+    A fin de mes se proyecta así: lo que se paga una vez por mes (luz, agua, seguro, internet, alarma, teléfono, Elistar) es lo real si ya se pagó y, si no, lo del mes anterior;
+    el alquiler del Food Truck, lo del mes anterior hasta que entre todo; lo demás, al ritmo de los días cargados.
+  </p>
+  <p class="muted neta-note">
+    Chase es lo que se pagó y el Bce lo que corresponde al mes, así que algunos renglones no coinciden (sueldos, reparaciones o expensas, por ejemplo).
+    {% if n.has_bce %}La columna del Bce ({{ n.bce_source }}) muestra cuánto se desvió cada uno.{% else %}Cuando el mes tenga Bce, se ve al lado lo real: se sube en Proyecciones, en "Control contra el Balance".{% endif %}
+  </p>
+</div>
+
+<style>
+  .historial-nav { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .historial-nav-btn { text-decoration: none; display: inline-block; }
+  .historial-nav-title { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .historial-nav-title a { font-size: 12.5px; text-decoration: none; }
+  .historial-table-wrap { overflow-x: auto; margin-top: 4px; border: 1px solid var(--border); border-radius: 10px; }
+  .historial-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+  .historial-table th, .historial-table td { padding: 7px 14px; text-align: left; white-space: nowrap; }
+  .historial-table thead th { background: var(--accent-soft); font-weight: 700; border-bottom: 1px solid var(--border); }
+  .card > h2 { margin-bottom: 16px; }
+
+  .neta-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .neta-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 16px 18px; }
+  .neta-kpi-hero { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .neta-kpi-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-soft); }
+  .neta-kpi-value { font-size: 28px; font-weight: 700; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+  .neta-kpi-sub { font-size: 12.5px; color: var(--text-soft); }
+  .neta-kpi-hero .neta-kpi-label, .neta-kpi-hero .neta-kpi-sub { color: rgba(255, 255, 255, 0.85); }
+
+  .neta-table th:nth-child(n+3), .neta-table td:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
+  .neta-col-src { white-space: normal !important; font-size: 12px; color: var(--text-soft); min-width: 260px; }
+  .neta-section td { background: var(--surface-alt); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-soft); border-top: 1px solid var(--border); }
+  .neta-group td { font-weight: 700; border-top: 1px solid var(--border); }
+  .neta-group a { text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
+  .neta-line td:first-child { padding-left: 30px; }
+  .neta-proj { color: var(--accent); font-weight: 600; }
+  .neta-total td { font-weight: 700; background: var(--surface-alt); border-top: 2px solid var(--border); }
+  .neta-net td { font-weight: 700; font-size: 15px; background: var(--accent-soft); border-top: 2px solid var(--accent); }
+  .neta-note { font-size: 12.5px; margin: 12px 0 0; line-height: 1.5; }
+  .neta-warn { margin: 0 0 12px; color: var(--error); font-size: 13px; }
+</style>
+{% endblock %}

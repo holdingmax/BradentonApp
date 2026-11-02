@@ -25,6 +25,7 @@ import os
 import config_store
 import fisico
 import fisico_db
+import lottery_db
 import reportes_db
 from reporte_diario import DEPARTMENT_GROUPS, group_department_sales
 
@@ -76,6 +77,41 @@ def _ppp(year, month, upto=None):
     gallons += sum(inv.get("gallons") or 0.0 for inv in invoices)
     amount += sum(inv.get("amount") or 0.0 for inv in invoices)
     return (amount / gallons if gallons else None), len(invoices)
+
+
+def lottery_commissions(year, month, pos_proj=None, margin=None):
+    """
+    La ganancia de Lottery del mes: las comisiones (On-Line + Skoff) de las
+    semanas que se pagan a Chase en el mes, igual que el TOTAL DEL MES del
+    Excel de Lottery y la cuenta 4.10 del Bce (pedido del usuario,
+    2026-11-02). La última semana de un mes que se paga en el siguiente cuenta
+    en el siguiente. Proyectado: al ritmo de los días con comisión cargada,
+    hasta completar las semanas del mes. Sin ningún día cargado, la venta de
+    LOTTO del POS proyectada por el % teórico (`pos_proj` * `margin`).
+
+    Medido del 27/07 al 11/10/2026: la comisión fue el 5,97 % de lo vendido
+    (por semana, de 3 % a 7 %, porque la de Skoff se cobra sobre los libros
+    liquidados, no sobre la venta).
+    """
+    days = [d for block in lottery_db.blocks_paid_in_month(year, month) for d in block["days"]]
+    loaded = [d for d in days if d.get("total_comm") is not None or d.get("sales_comm") is not None]
+    comm = -sum((d.get("total_comm") or 0.0) + (d.get("sales_comm") or 0.0) for d in loaded)
+    sales = sum((d.get("sales") or 0.0) + (d.get("skoff_net_sales") or 0.0) for d in loaded)
+    if loaded:
+        comm_proj = comm * len(days) / len(loaded)
+    else:
+        comm_proj = pos_proj * margin if (pos_proj is not None and margin is not None) else None
+    return {
+        "first": dt.date.fromisoformat(days[0]["date"]) if days else None,
+        "last": dt.date.fromisoformat(days[-1]["date"]) if days else None,
+        "days_total": len(days),
+        "days_loaded": len(loaded),
+        "comm": comm if loaded else None,
+        "comm_proj": comm_proj,
+        "sales": sales if loaded else None,
+        "rate": _ratio(comm, sales) if loaded else None,
+        "estimated": not loaded,
+    }
 
 
 def _month_days(year, month):
@@ -193,37 +229,76 @@ def build_projection(year, month):
     gallons, amount, source = fisico._resolve_initial(year, month)
     result["fuel_initial"] = {"gallons": gallons, "amount": amount, "source": source}
 
-    real =balance_for_month(year, month)
+    _add_lottery(year, month, result, margins)
+    result["split"] = gross_split(result)
+
+    real = balance_for_month(year, month)
     if real:
         result["balance"] = _balance_control(year, month, days, margins, real)
     result["charts"] = _chart_data(year, month, result)
     return result
 
 
+def _add_lottery(year, month, result, margins):
+    """
+    Lottery deja de ir por % teórico: su utilidad es la comisión real de las
+    semanas que se pagan en el mes (lottery_commissions), y el C-Store suma
+    esa comisión, como la Nota 3 del Bce. Kia / Toyota no es ganancia (es
+    combustible a cuenta): queda afuera.
+    """
+    cstore = result["cstore"]
+    lotto = next(r for r in cstore["rubros"] if r["label"] == "LOTERY/LOTTO")
+    lot = lottery_commissions(year, month, lotto["proj"], lotto["margin"])
+    lotto.update({"lottery": True, "utilidad": lot["comm"], "utilidad_proj": lot["comm_proj"], "margin": lot["rate"]})
+    result["lottery"] = lot
+
+    def plus(a, b):
+        return (a or 0.0) + (b or 0.0) if (a is not None or b is not None) else None
+
+    base = cstore["balance"]
+    with_lottery = {
+        "amount": plus(base["amount"], lotto["amount"]),
+        "utilidad": plus(base["utilidad"], lot["comm"]),
+        "proj": plus(base["proj"], lotto["proj"]),
+        "utilidad_proj": plus(base["utilidad_proj"], lot["comm_proj"]),
+    }
+    with_lottery["margin"] = _ratio(with_lottery["utilidad"], with_lottery["amount"])
+    with_lottery["margin_proj"] = _ratio(with_lottery["utilidad_proj"], with_lottery["proj"])
+    cstore["with_lottery"] = with_lottery
+
+
+def gross_split(result):
+    """
+    Qué parte de la utilidad bruta proyectada pone cada cosa (pedido del
+    usuario, 2026-11-02): el combustible solo, y el C-Store abierto en sus
+    rubros más la comisión de Lottery. None sin PPP.
+    """
+    fuel = result["fuel_proj"]["utilidad"]
+    if fuel is None:
+        return None
+    rubros = result["cstore"]["rubros"]
+    parts = [{"key": r["label"], "label": r["display"] if not r.get("lottery") else "Lottery",
+              "value": r["utilidad_proj"] or 0.0}
+             for r in [r for r in rubros if r["in_balance"]] + [r for r in rubros if r.get("lottery")]]
+    cstore = sum(p["value"] for p in parts)
+    total = fuel + cstore
+    for p in parts:
+        p["pct_total"] = _ratio(p["value"], total)
+        p["pct_cstore"] = _ratio(p["value"], cstore)
+    return {
+        "total": total,
+        "fuel": {"value": fuel, "pct_total": _ratio(fuel, total)},
+        "cstore": {"value": cstore, "pct_total": _ratio(cstore, total), "parts": parts},
+    }
+
+
 def _chart_data(year, month, result):
     """
     Las series de los gráficos de la página (pedido del usuario, 2026-10-27):
-    el mes día por día, con los días que faltan al ritmo de los cargados, y la
-    historia mes a mes del Balance guardado, hasta el mes anterior al elegido.
+    la utilidad bruta proyectada por unidad y la historia mes a mes del
+    Balance guardado, hasta el mes anterior al elegido. El gráfico del mes día
+    por día se sacó el 2026-11-02 (pedido del usuario: no servía).
     """
-    days = result["days"]
-    by_day = {d["date"].day: d for d in days}
-    loaded = result["days_loaded"]
-    fuel_avg = result["fuel"]["sales"] / loaded if loaded else None
-    cstore_avg = result["cstore"]["balance"]["amount"] / loaded if loaded else None
-    last = result["last_day"].day if result["last_day"] else 0
-    daily = []
-    for day in range(1, result["days_in_month"] + 1):
-        d = by_day.get(day)
-        daily.append({
-            "day": day,
-            "fuel": round(d["fuel_sales"], 2) if d else None,
-            "cstore": round(d["cstore"], 2) if d else None,
-            # Solo los días posteriores al último cargado: un hueco en el medio
-            # es un Close Store que falta, no una proyección.
-            "proj": round(fuel_avg + cstore_avg, 2) if (d is None and day > last and loaded) else None,
-        })
-
     stored = config_store.read(config_store.PROYECCIONES_BALANCE) or {}
     current = f"{year:04d}-{month:02d}"
     history = []
@@ -244,10 +319,7 @@ def _chart_data(year, month, result):
             "margin": round(price - cost_gal, 4) if (price is not None and cost_gal is not None) else None,
         })
 
-    fuel_util = result["fuel_proj"]["utilidad"]
-    cstore_util = result["cstore"]["balance"]["utilidad_proj"]
     return {
-        "daily": daily,
         "history": history,
         "current": {
             "month": current,
@@ -255,28 +327,53 @@ def _chart_data(year, month, result):
             "cstore_sales": result["cstore"]["balance"]["proj"],
             "gallons": result["fuel_proj"]["gallons"],
         },
-        "utilidad_split": {"fuel": fuel_util, "cstore": cstore_util},
+        "split": result["split"],
     }
 
 
 # --- Control contra el Balance ----------------------------------------------
 
-BALANCE_FIELDS = ("galones", "ventas_combustible", "costo_combustible", "ventas_cstore", "costo_cstore")
 _BALANCE_ROWS = {
     "galones vendidos": "galones",
     "4.01.00.00 - ventas de combustible": "ventas_combustible",
     "4.09.00.00 - ventas c-store": "ventas_cstore",
     "5.02.00.00 - costo de ventas de combustible": "costo_combustible",
     "5.15.00.00 - costo de venta c-store": "costo_cstore",
+    # Para el desglose de la utilidad neta (pedido del usuario, 2026-11-02).
+    "4.10.00.00 - comisiones lottery": "comisiones_lottery",
+    "4.05.00.00 - ventas ice machine": "ventas_ice",
+    "4.06.00.00 - alquiler food truck": "alquiler_food_truck",
+    "4.04.00.00 - ventas carwash/vaccum": "ventas_vaccum",
+    "4.03.00.00 - otros ingresos y descuentos": "otros_ingresos",
+    "4.07.00.00 - otros ingresos combustible": "otros_ingresos_combustible",
+    "5.04.00.00 - gastos de tarjeta de credito": "gastos_tarjeta",
 }
+# El "ESTADO RESULTADO" de arriba de la hoja: los gastos vienen en negativo.
+_RESULTADO_ROWS = {
+    "ganancia bruta": "ganancia_bruta",
+    "sueldos y jornales": "sueldos",
+    "comisiones y gastos bancarios": "gastos_bancarios",
+    "energia electrica": "energia",
+    "water and waste services": "agua",
+    "intereses y recargos": "intereses",
+    "seguro": "seguro",
+    "reparacion y mantenimientos": "reparaciones",
+    "administration fees": "adm_fees",
+    "otros gastos varios": "otros_gastos_varios",
+    "gastos directos": "gastos_directos",
+    "otros": "otros_gastos",
+    "resultado neto": "resultado_neto",
+}
+BALANCE_FIELDS = tuple(_BALANCE_ROWS.values()) + tuple(_RESULTADO_ROWS.values())
 
 
 def read_balance_workbook(path):
     """
-    {"AAAA-MM": {galones, ventas_combustible, costo_combustible, ventas_cstore,
-    costo_cstore}} de la hoja "BALANCE HISTORICO" de un Bce: una columna por
-    mes, con las fechas en el renglón "Nota 1 : Ventas". Solo los meses con al
-    menos la venta de combustible; un dato vacío queda en None.
+    {"AAAA-MM": {campo: valor}} de la hoja "BALANCE HISTORICO" de un Bce (los
+    campos de BALANCE_FIELDS): una columna por mes, con las fechas en el
+    renglón "Nota 1 : Ventas", y el "ESTADO RESULTADO" con sus propias fechas.
+    Solo los meses con al menos la venta de combustible; un dato vacío queda
+    en None.
     """
     import openpyxl
 
@@ -292,25 +389,43 @@ def read_balance_workbook(path):
                    if row and isinstance(row[0], str) and row[0].strip().lower().startswith("nota 1")), None)
     if header is None:
         raise ValueError("No encontré el renglón \"Nota 1 : Ventas\" con los meses en BALANCE HISTORICO.")
-    months = {col: f"{value.year:04d}-{value.month:02d}"
-              for col, value in enumerate(rows[header]) if isinstance(value, (dt.date, dt.datetime))}
-    found = {}
-    # La primera aparición de cada renglón después de los meses (más abajo se repiten).
-    for row in rows[header + 1:]:
-        label = (row[0] or "").strip().lower() if row and isinstance(row[0], str) else ""
-        field = _BALANCE_ROWS.get(label)
-        if field and field not in found:
-            found[field] = row
+    def label_of(row):
+        return row[0].strip().lower() if row and isinstance(row[0], str) else ""
+
+    def month_columns(row):
+        return {col: f"{value.year:04d}-{value.month:02d}"
+                for col, value in enumerate(row) if isinstance(value, (dt.date, dt.datetime))}
+
+    def first_rows(section, names):
+        # La primera aparición de cada renglón (más abajo se repiten).
+        found = {}
+        for row in section:
+            field = names.get(label_of(row))
+            if field and field not in found:
+                found[field] = row
+        return found
+
+    months = month_columns(rows[header])
+    found = first_rows(rows[header + 1:], _BALANCE_ROWS)
     if "ventas_combustible" not in found:
         raise ValueError("No encontré \"4.01.00.00 - VENTAS DE COMBUSTIBLE\" en BALANCE HISTORICO.")
+    # El Estado de Resultado va arriba de la Nota 1. Si falta, esos campos quedan en None.
+    results_header = next((i for i, row in enumerate(rows[:header]) if label_of(row) == "estado resultado"), None)
+    sections = [(months, found)]
+    if results_header is not None:
+        sections.append((month_columns(rows[results_header]),
+                         first_rows(rows[results_header + 1:header], _RESULTADO_ROWS)))
 
     result = {}
-    for col, key in months.items():
-        values = {}
-        for field in BALANCE_FIELDS:
-            row = found.get(field)
-            value = row[col] if row is not None and col < len(row) else None
-            values[field] = round(float(value), 2) if isinstance(value, (int, float)) else None
+    for key in sorted(set(months.values())):
+        values = dict.fromkeys(BALANCE_FIELDS)
+        for columns, rows_by_field in sections:
+            col = next((c for c, k in columns.items() if k == key), None)
+            if col is None:
+                continue
+            for field, row in rows_by_field.items():
+                value = row[col] if col < len(row) else None
+                values[field] = round(float(value), 2) if isinstance(value, (int, float)) else None
         if values["ventas_combustible"]:
             result[key] = values
     if not result:
