@@ -86,69 +86,37 @@
   <h2>Utilidad bruta proyectada</h2>
   {% if split %}
   <div class="proy-split">
-    <div class="proy-chart proy-chart-donut"><canvas id="proy-donut" role="img" aria-label="Qué parte de la utilidad bruta proyectada pone el combustible y cada rubro del C-Store"></canvas></div>
+    <div class="proy-split-donut">
+      <div class="proy-chart proy-chart-donut"><canvas id="proy-donut" role="img" aria-label="Qué parte de la utilidad bruta proyectada pone el combustible y cada rubro del C-Store"></canvas></div>
+      <div class="proy-donut-center"><span>Total</span><strong>{{ money(split.total, 0) }}</strong></div>
+    </div>
     <div class="proy-split-list">
-      <div class="proy-split-row proy-split-unit">
-        <span><i class="proy-sq proy-sq-fuel"></i>Combustible</span>
-        <strong>{{ money(split.fuel.value, 0) }}</strong>
-        <span class="proy-split-pct">{{ pct0(split.fuel.pct_total) }} del total</span>
-      </div>
-      <a class="proy-split-row proy-split-unit" href="#proy-cstore">
-        <span><i class="proy-sq proy-sq-cstore"></i>C-Store</span>
-        <strong>{{ money(split.cstore.value, 0) }}</strong>
-        <span class="proy-split-pct">{{ pct0(split.cstore.pct_total) }} del total</span>
-      </a>
+      <div class="proy-split-head"><span>Del total</span><span>Utilidad</span><span>%</span></div>
+      {% for name, color, unit, href in [("Combustible", "#2A78D6", split.fuel, none), ("C-Store", "#EB6834", split.cstore, "#proy-cstore")] %}
+      <{{ 'a href="%s"'|format(href) if href else 'div' }} class="proy-split-row proy-split-unit">
+        <span class="proy-split-name"><i class="proy-sq" style="background: {{ color }};"></i>{{ name }}</span>
+        <span class="proy-split-num">{{ money(unit.value, 0) }}</span>
+        <span class="proy-split-num proy-split-pct">{{ pct0(unit.pct_total) }}</span>
+        <span class="proy-split-bar"><i style="width: {{ ((unit.pct_total or 0) * 100)|round(1) }}%; background: {{ color }};"></i></span>
+      </{{ 'a' if href else 'div' }}>
+      {% endfor %}
+      <div class="proy-split-head proy-split-head-sub"><span>Dentro del C-Store</span><span></span><span></span></div>
       {% for part in split.cstore.parts %}
       <a class="proy-split-row proy-split-part" href="#proy-cstore">
-        <span><i class="proy-sq" style="background: {{ part_colors[loop.index0] }};"></i>{{ part.label }}</span>
-        <strong>{{ money(part.value, 0) }}</strong>
-        <span class="proy-split-pct">{{ pct(part.pct_cstore) }} del C-Store</span>
+        <span class="proy-split-name"><i class="proy-sq" style="background: {{ part_colors[loop.index0] }};"></i>{{ part.label }}</span>
+        <span class="proy-split-num">{{ money(part.value, 0) }}</span>
+        <span class="proy-split-num proy-split-pct">{{ pct0(part.pct_cstore) }}</span>
+        <span class="proy-split-bar"><i style="width: {{ ((part.pct_cstore or 0) * 100)|round(1) }}%; background: {{ part_colors[loop.index0] }};"></i></span>
       </a>
       {% endfor %}
     </div>
   </div>
   <p class="muted proy-note">
-    Total {{ money(split.total, 0) }}. Lottery es la comisión real de las semanas que se pagan en el mes, no lo vendido.
+    Lottery es la comisión real de las semanas que se pagan en el mes, no lo vendido.
     Kia / Toyota no entra: es combustible a cuenta, no ganancia.
   </p>
   {% else %}
   <p class="muted" style="margin: 0;">Sin PPP no se puede calcular la utilidad del combustible.</p>
-  {% endif %}
-</div>
-
-<div class="card" id="proy-history-card">
-  <div class="proy-history-head">
-    {# De la app en los meses con todos los Close Store; del Bce solo los que la app no tiene (pedido del usuario, 2026-11-02). #}
-    {% set bce_months = p.charts.history|selectattr("source", "equalto", "bce")|list %}
-    <h2>Mes a mes <span class="muted proy-history-src">({{ "de la app; los meses que la app no tiene, del Bce" if bce_months else "de la app" }})</span></h2>
-    {% if p.charts.history %}
-    <div class="proy-range" role="group" aria-label="Cuántos meses mostrar">
-      {% for n, label in [(6, "6 meses"), (12, "12 meses"), (24, "24 meses"), (0, "Todo")] %}
-      <button type="button" class="proy-range-btn{{ ' is-active' if n == 12 }}" data-months="{{ n }}">{{ label }}</button>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </div>
-  {% if p.charts.history %}
-  <h3 class="proy-subtitle proy-subtitle-first">Combustible por galón</h3>
-  <p class="muted proy-note proy-history-note">El costo es el PPP de Físico en los meses de la app{% if bce_months %} y el costo de venta del Bce en los demás{% endif %}. Pasando el mouse se ve de dónde sale cada mes.</p>
-  <div class="proy-legend">
-    <span><i class="proy-sq proy-sq-fuel"></i>Precio de venta</span>
-    <span><i class="proy-sq proy-sq-cstore"></i>Costo</span>
-    <span><i class="proy-sq proy-sq-margin"></i>Margen</span>
-  </div>
-  <div class="proy-chart proy-chart-tall"><canvas id="proy-pergal" role="img" aria-label="Precio de venta, costo y margen por galón de cada mes"></canvas></div>
-  <h3 class="proy-subtitle">Galones vendidos</h3>
-  <div class="proy-chart proy-chart-small"><canvas id="proy-gallons" role="img" aria-label="Galones vendidos por mes"></canvas></div>
-  <h3 class="proy-subtitle">Ventas por mes</h3>
-  <div class="proy-legend">
-    <span><i class="proy-sq proy-sq-fuel"></i>Combustible</span>
-    <span><i class="proy-sq proy-sq-cstore"></i>C-Store</span>
-    <span><i class="proy-sq proy-sq-proj"></i>{{ month_name }} proyectado</span>
-  </div>
-  <div class="proy-chart"><canvas id="proy-monthly" role="img" aria-label="Ventas de combustible y C-Store de cada mes, con el mes elegido proyectado"></canvas></div>
-  {% else %}
-  <p class="muted" style="margin: 0;">Todavía no hay ningún mes completo antes de {{ month_name|lower }} {{ year }}: un mes entra cuando tiene todos los Close Store cargados. Para ver los meses anteriores a la app, se sube el Bce abajo, en "Control contra el Balance".</p>
   {% endif %}
 </div>
 
@@ -390,44 +358,36 @@
   .proy-kpi-hero.proy-kpi-link { color: #fff; }
   .proy-kpi-more { margin-left: auto; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; opacity: 0.9; }
   #proy-cstore { scroll-margin-top: 80px; }
-  .proy-split { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 24px; align-items: center; }
-  @media (max-width: 700px) { .proy-split { grid-template-columns: minmax(0, 1fr); } }
-  .proy-split-list { display: flex; flex-direction: column; gap: 2px; }
-  .proy-split-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 120px; gap: 12px; align-items: baseline; padding: 6px 10px; border-radius: 8px; text-decoration: none; color: inherit; font-size: 13.5px; }
-  .proy-split-row span:first-child { display: inline-flex; align-items: center; gap: 8px; }
-  .proy-split-row strong { text-align: right; font-variant-numeric: tabular-nums; }
-  .proy-split-pct { text-align: right; font-size: 12.5px; color: var(--text-soft); }
-  .proy-split-unit { font-weight: 700; }
-  .proy-split-part { padding-left: 28px; }
+  .proy-split { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 1fr); gap: 32px; align-items: center; }
+  @media (max-width: 760px) { .proy-split { grid-template-columns: minmax(0, 1fr); } }
+  .proy-split-donut { position: relative; }
+  .proy-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+  .proy-donut-center span { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-soft); }
+  .proy-donut-center strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+  .proy-split-list { display: flex; flex-direction: column; max-width: 560px; }
+  .proy-split-head, .proy-split-row { display: grid; grid-template-columns: minmax(0, 1fr) 100px 56px; column-gap: 14px; align-items: center; }
+  .proy-split-head { padding: 0 10px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-soft); border-bottom: 1px solid var(--border); }
+  .proy-split-head span:not(:first-child) { text-align: right; }
+  .proy-split-head-sub { margin-top: 14px; }
+  .proy-split-row { row-gap: 5px; padding: 8px 10px; border-radius: 8px; text-decoration: none; color: inherit; font-size: 13.5px; }
+  .proy-split-name { display: inline-flex; align-items: center; gap: 9px; }
+  .proy-split-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .proy-split-pct { color: var(--text-soft); }
+  .proy-split-unit { font-weight: 700; font-size: 14.5px; }
+  .proy-split-bar { grid-column: 1 / -1; height: 5px; border-radius: 999px; background: var(--surface-alt); overflow: hidden; }
+  .proy-split-bar i { display: block; height: 100%; border-radius: 999px; }
   a.proy-split-row:hover { background: var(--surface-alt); }
+  a.proy-split-row:hover .proy-split-bar { background: var(--border); }
 
   .proy-chart { position: relative; height: 240px; }
-  .proy-chart-donut { height: 200px; }
-  .proy-chart-tall { height: 280px; }
-  .proy-chart-small { height: 150px; }
-  .proy-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--text-soft); margin: 4px 0 10px; }
-  .proy-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .proy-chart-donut { height: 230px; }
   .proy-sq { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-  .proy-sq-fuel { background: #2A78D6; }
-  .proy-sq-cstore { background: #EB6834; }
-  .proy-sq-margin { background: #1BAF7A; }
-  .proy-sq-proj { background: #CBD5E1; }
-  .proy-history-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-  .proy-history-head h2 { margin: 0; }
-  .proy-history-src { font-size: 13px; font-weight: 500; }
-  .proy-history-note { margin: 2px 0 6px; }
-  .proy-subtitle-first { margin-top: 14px; }
-  .proy-range { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 3px; background: var(--surface-alt); }
-  .proy-range-btn { background: transparent; color: var(--text-soft); border: 0; border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; box-shadow: none; }
-  .proy-range-btn:hover { background: transparent; color: var(--text); }
-  .proy-range-btn.is-active { background: var(--accent); color: #fff; }
 
   .proy-sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
   .proy-sum-unit { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-alt); padding: 14px 16px; }
   .proy-sum-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
   /* Aire entre el título de cada cuadro y lo de abajo (pedido del usuario, 2026-10-27). */
   .card > h2 { margin-bottom: 16px; }
-  .card > .proy-history-head { margin-bottom: 6px; }
   .proy-unit-icon { width: 18px; height: 18px; flex-shrink: 0; }
   .proy-unit-icon-fuel { color: #2A78D6; }
   .proy-unit-icon-cstore { color: #EB6834; }
@@ -443,7 +403,6 @@
   .proy-sum-band { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 14px; padding: 10px 16px; border-radius: var(--radius); background: var(--accent-soft); font-size: 13.5px; }
 
   .proy-note { font-size: 12.5px; margin: 12px 0 0; line-height: 1.5; }
-  .proy-subtitle { margin: 22px 0 0; font-size: 15px; }
   .proy-cell-proj { color: var(--accent); font-weight: 600; }
   .proy-row-aside td, .proy-col-aside { color: var(--text-soft); }
   .proy-neg { color: var(--error); }
@@ -464,30 +423,16 @@
 (function () {
   if (!window.Chart) return;
   const data = {{ p.charts|tojson }};
-  const FUEL = "#2A78D6", CSTORE = "#EB6834", MARGIN = "#1BAF7A", PROJ = "#CBD5E1", GRID = "#EEF0F3";
+  const FUEL = "#2A78D6";
   const money = v => (v < 0 ? "−$" : "$") + Math.abs(Math.round(v)).toLocaleString("en-US");
-  const thousands = v => "$" + Math.round(v / 1000) + "k";
-  const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-  const monthLabel = key => MONTHS[+key.slice(5) - 1] + "-" + key.slice(2, 4);
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
   Chart.defaults.font.size = 11.5;
   Chart.defaults.color = "#6B7280";
   // Animaciones a velocidad normal, para que se aprecien (pedido del usuario,
-  // 2026-10-27): poco más de un segundo, con las barras entrando una tras
-  // otra. Van aunque Windows tenga apagados los
+  // 2026-10-27): poco más de un segundo. Van aunque Windows tenga apagados los
   // efectos de animación (prefers-reduced-motion): en la PC de la oficina
   // está apagado y así no se veía ninguna.
   Object.assign(Chart.defaults.animation, { duration: 1200, easing: "easeOutQuart" });
-  const tip = fmt => ({ callbacks: { label: c => c.dataset.label + ": " + fmt(c.raw) } });
-  // De dónde sale cada mes de la historia, debajo del título del tooltip.
-  const SOURCES = { app: "De la app", bce: "Del Bce" };
-  const withSource = (rows, t) => Object.assign(t, { callbacks: Object.assign({}, t.callbacks, {
-    afterTitle: items => { const r = items.length ? rows[items[0].dataIndex] : null; return r ? SOURCES[r.source] : (items.length ? "Proyectado" : ""); },
-  }) });
-  const axes = yFmt => ({
-    x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
-    y: { beginAtZero: true, grid: { color: GRID }, border: { display: false }, ticks: { callback: yFmt } },
-  });
 
   // Los números de arriba suben de 0 a su valor.
   document.querySelectorAll("[data-count]").forEach(el => {
@@ -522,69 +467,6 @@
     });
   }
 
-  // Mes a mes: la historia del Balance más el mes elegido proyectado. El
-  // filtro de meses rehace los tres gráficos.
-  const history = data.history;
-  if (!history.length) return;
-  const cur = data.current;
-  const charts = {};
-  function render(months) {
-    const rows = months ? history.slice(-months) : history;
-    const labels = rows.map(r => monthLabel(r.month));
-    Object.values(charts).forEach(c => c.destroy());
-    charts.pergal = new Chart(document.getElementById("proy-pergal"), {
-      data: {
-        labels,
-        datasets: [
-          { type: "line", label: "Precio de venta", data: rows.map(r => r.price), borderColor: FUEL, backgroundColor: FUEL, borderWidth: 2, pointRadius: 2.5, tension: 0.3, order: 1 },
-          { type: "line", label: "Costo", data: rows.map(r => r.cost), borderColor: CSTORE, backgroundColor: CSTORE, borderWidth: 2, borderDash: [5, 3], pointRadius: 2.5, tension: 0.3, order: 2 },
-          { type: "bar", label: "Margen", data: rows.map(r => r.margin), backgroundColor: MARGIN, borderRadius: 3, maxBarThickness: 16, order: 3 },
-        ],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false },
-        plugins: { legend: { display: false }, tooltip: withSource(rows, tip(v => v == null ? "—" : "$" + v.toFixed(4))) },
-        scales: axes(v => "$" + v.toFixed(2)),
-      },
-    });
-    charts.gallons = new Chart(document.getElementById("proy-gallons"), {
-      type: "line",
-      data: { labels, datasets: [{ label: "Galones", data: rows.map(r => r.gallons), borderColor: FUEL, backgroundColor: "rgba(42, 120, 214, 0.10)", fill: true, borderWidth: 2, pointRadius: 2, tension: 0.3 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false },
-        plugins: { legend: { display: false }, tooltip: withSource(rows, tip(v => Math.round(v).toLocaleString("en-US") + " gal")) },
-        scales: Object.assign(axes(v => Math.round(v / 1000) + "k"), { y: { beginAtZero: false, grid: { color: GRID }, border: { display: false }, ticks: { callback: v => Math.round(v / 1000) + "k" } } }),
-      },
-    });
-    const pad = rows.map(() => null);
-    charts.monthly = new Chart(document.getElementById("proy-monthly"), {
-      type: "bar",
-      data: {
-        labels: labels.concat([monthLabel(cur.month)]),
-        datasets: [
-          { label: "Combustible", data: rows.map(r => r.fuel_sales).concat([null]), backgroundColor: FUEL, stack: "s", maxBarThickness: 26 },
-          { label: "C-Store", data: rows.map(r => r.cstore_sales).concat([null]), backgroundColor: CSTORE, stack: "s", maxBarThickness: 26, borderRadius: { topLeft: 3, topRight: 3 } },
-          { label: "Combustible proyectado", data: pad.concat([cur.fuel_sales]), backgroundColor: "rgba(42, 120, 214, 0.40)", stack: "s", maxBarThickness: 26 },
-          { label: "C-Store proyectado", data: pad.concat([cur.cstore_sales]), backgroundColor: "rgba(235, 104, 52, 0.40)", stack: "s", maxBarThickness: 26, borderRadius: { topLeft: 3, topRight: 3 } },
-        ],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        animation: { delay: c => (c.type === "data" && c.mode === "default" ? c.dataIndex * 20 : 0) },
-        interaction: { mode: "index", intersect: false },
-        plugins: { legend: { display: false }, tooltip: withSource(rows, { filter: i => i.raw != null, callbacks: { label: c => c.dataset.label + ": " + money(c.raw) } }) },
-        scales: axes(thousands),
-      },
-    });
-  }
-  const buttons = document.querySelectorAll(".proy-range-btn");
-  buttons.forEach(btn => btn.addEventListener("click", () => {
-    buttons.forEach(b => b.classList.toggle("is-active", b === btn));
-    render(parseInt(btn.dataset.months, 10));
-  }));
-  render(12);
 })();
 </script>
 {% endif %}
