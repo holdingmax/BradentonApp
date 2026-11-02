@@ -118,7 +118,9 @@
 
 <div class="card" id="proy-history-card">
   <div class="proy-history-head">
-    <h2>Mes a mes <span class="muted proy-history-src">(del Balance)</span></h2>
+    {# De la app en los meses con todos los Close Store; del Bce solo los que la app no tiene (pedido del usuario, 2026-11-02). #}
+    {% set bce_months = p.charts.history|selectattr("source", "equalto", "bce")|list %}
+    <h2>Mes a mes <span class="muted proy-history-src">({{ "de la app; los meses que la app no tiene, del Bce" if bce_months else "de la app" }})</span></h2>
     {% if p.charts.history %}
     <div class="proy-range" role="group" aria-label="Cuántos meses mostrar">
       {% for n, label in [(6, "6 meses"), (12, "12 meses"), (24, "24 meses"), (0, "Todo")] %}
@@ -129,6 +131,7 @@
   </div>
   {% if p.charts.history %}
   <h3 class="proy-subtitle proy-subtitle-first">Combustible por galón</h3>
+  <p class="muted proy-note proy-history-note">El costo es el PPP de Físico en los meses de la app{% if bce_months %} y el costo de venta del Bce en los demás{% endif %}. Pasando el mouse se ve de dónde sale cada mes.</p>
   <div class="proy-legend">
     <span><i class="proy-sq proy-sq-fuel"></i>Precio de venta</span>
     <span><i class="proy-sq proy-sq-cstore"></i>Costo</span>
@@ -145,7 +148,7 @@
   </div>
   <div class="proy-chart"><canvas id="proy-monthly" role="img" aria-label="Ventas de combustible y C-Store de cada mes, con el mes elegido proyectado"></canvas></div>
   {% else %}
-  <p class="muted" style="margin: 0;">Todavía no hay meses del Balance anteriores a {{ month_name|lower }} {{ year }}. Se suben abajo, en "Control contra el Balance": el Bce trae toda la historia.</p>
+  <p class="muted" style="margin: 0;">Todavía no hay ningún mes completo antes de {{ month_name|lower }} {{ year }}: un mes entra cuando tiene todos los Close Store cargados. Para ver los meses anteriores a la app, se sube el Bce abajo, en "Control contra el Balance".</p>
   {% endif %}
 </div>
 
@@ -412,6 +415,7 @@
   .proy-history-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
   .proy-history-head h2 { margin: 0; }
   .proy-history-src { font-size: 13px; font-weight: 500; }
+  .proy-history-note { margin: 2px 0 6px; }
   .proy-subtitle-first { margin-top: 14px; }
   .proy-range { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 3px; background: var(--surface-alt); }
   .proy-range-btn { background: transparent; color: var(--text-soft); border: 0; border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; box-shadow: none; }
@@ -475,6 +479,11 @@
   // está apagado y así no se veía ninguna.
   Object.assign(Chart.defaults.animation, { duration: 1200, easing: "easeOutQuart" });
   const tip = fmt => ({ callbacks: { label: c => c.dataset.label + ": " + fmt(c.raw) } });
+  // De dónde sale cada mes de la historia, debajo del título del tooltip.
+  const SOURCES = { app: "De la app", bce: "Del Bce" };
+  const withSource = (rows, t) => Object.assign(t, { callbacks: Object.assign({}, t.callbacks, {
+    afterTitle: items => { const r = items.length ? rows[items[0].dataIndex] : null; return r ? SOURCES[r.source] : (items.length ? "Proyectado" : ""); },
+  }) });
   const axes = yFmt => ({
     x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
     y: { beginAtZero: true, grid: { color: GRID }, border: { display: false }, ticks: { callback: yFmt } },
@@ -535,7 +544,7 @@
       options: {
         responsive: true, maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
-        plugins: { legend: { display: false }, tooltip: tip(v => v == null ? "—" : "$" + v.toFixed(4)) },
+        plugins: { legend: { display: false }, tooltip: withSource(rows, tip(v => v == null ? "—" : "$" + v.toFixed(4))) },
         scales: axes(v => "$" + v.toFixed(2)),
       },
     });
@@ -545,7 +554,7 @@
       options: {
         responsive: true, maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
-        plugins: { legend: { display: false }, tooltip: tip(v => Math.round(v).toLocaleString("en-US") + " gal") },
+        plugins: { legend: { display: false }, tooltip: withSource(rows, tip(v => Math.round(v).toLocaleString("en-US") + " gal")) },
         scales: Object.assign(axes(v => Math.round(v / 1000) + "k"), { y: { beginAtZero: false, grid: { color: GRID }, border: { display: false }, ticks: { callback: v => Math.round(v / 1000) + "k" } } }),
       },
     });
@@ -565,7 +574,7 @@
         responsive: true, maintainAspectRatio: false,
         animation: { delay: c => (c.type === "data" && c.mode === "default" ? c.dataIndex * 20 : 0) },
         interaction: { mode: "index", intersect: false },
-        plugins: { legend: { display: false }, tooltip: { filter: i => i.raw != null, callbacks: { label: c => c.dataset.label + ": " + money(c.raw) } } },
+        plugins: { legend: { display: false }, tooltip: withSource(rows, { filter: i => i.raw != null, callbacks: { label: c => c.dataset.label + ": " + money(c.raw) } }) },
         scales: axes(thousands),
       },
     });

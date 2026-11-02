@@ -239,6 +239,27 @@ def build_projection(year, month):
     return result
 
 
+def app_month_totals(year, month):
+    """
+    Un mes cerrado con los datos de la app, para la historia mes a mes: los
+    galones y la venta de combustible del Close Store, el costo al PPP de
+    Físico y la venta del C-Store (los rubros que el Bce cuenta como "Ventas
+    C-Store"). None si al mes le falta algún Close Store: ahí manda el Bce.
+    """
+    days = _month_days(year, month)
+    if len(days) < calendar.monthrange(year, month)[1]:
+        return None
+    gallons = sum(d["gallons"] for d in days)
+    ppp, _invoices = _ppp(year, month)
+    return {
+        "source": "app",
+        "gallons": gallons,
+        "fuel_sales": sum(d["fuel_sales"] for d in days),
+        "fuel_cost": gallons * ppp if ppp is not None else None,
+        "cstore_sales": sum(d["cstore"] for d in days),
+    }
+
+
 def _add_lottery(year, month, result, margins):
     """
     Lottery deja de ir por % teórico: su utilidad es la comisión real de las
@@ -295,25 +316,46 @@ def gross_split(result):
 def _chart_data(year, month, result):
     """
     Las series de los gráficos de la página (pedido del usuario, 2026-10-27):
-    la utilidad bruta proyectada por unidad y la historia mes a mes del
-    Balance guardado, hasta el mes anterior al elegido. El gráfico del mes día
-    por día se sacó el 2026-11-02 (pedido del usuario: no servía).
+    la utilidad bruta proyectada por unidad y la historia mes a mes, hasta el
+    mes anterior al elegido. El gráfico del mes día por día se sacó el
+    2026-11-02 (pedido del usuario: no servía).
+
+    La historia sale de la app en los meses que tienen todos los Close Store
+    (app_month); el Bce guardado queda solo para los meses que la app no tiene
+    (pedido del usuario, 2026-11-02: que la página no dependa del Bce).
     """
     stored = config_store.read(config_store.PROYECCIONES_BALANCE) or {}
     current = f"{year:04d}-{month:02d}"
-    history = []
-    for key in sorted(k for k in stored if k < current):
+    months = {}
+    for key in (k for k in stored if k < current):
         v = stored[key]
-        gallons = v.get("galones")
-        sales = v.get("ventas_combustible")
-        cost = v.get("costo_combustible")
-        price = _ratio(sales, gallons)
-        cost_gal = _ratio(cost, gallons)
+        months[key] = {
+            "source": "bce",
+            "gallons": v.get("galones"),
+            "fuel_sales": v.get("ventas_combustible"),
+            "fuel_cost": v.get("costo_combustible"),
+            "cstore_sales": v.get("ventas_cstore"),
+        }
+    for app_year in reportes_db.get_store_info_years():
+        for app_month in range(1, 13):
+            key = f"{app_year:04d}-{app_month:02d}"
+            if key >= current:
+                break
+            app = app_month_totals(app_year, app_month)
+            if app:
+                months[key] = app
+
+    history = []
+    for key in sorted(months):
+        v = months[key]
+        price = _ratio(v["fuel_sales"], v["gallons"])
+        cost_gal = _ratio(v["fuel_cost"], v["gallons"])
         history.append({
             "month": key,
-            "gallons": gallons,
-            "fuel_sales": sales,
-            "cstore_sales": v.get("ventas_cstore"),
+            "source": v["source"],
+            "gallons": v["gallons"],
+            "fuel_sales": v["fuel_sales"],
+            "cstore_sales": v["cstore_sales"],
             "price": round(price, 4) if price is not None else None,
             "cost": round(cost_gal, 4) if cost_gal is not None else None,
             "margin": round(price - cost_gal, 4) if (price is not None and cost_gal is not None) else None,
