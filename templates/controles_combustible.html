@@ -16,7 +16,7 @@
 <div class="page-header">
   <span class="eyebrow">Controles</span>
   <h1>Combustible</h1>
-  <p class="page-subtitle">El stock de galones contra la medición, las facturas de J.H. contra los EFT y el margen por galón, con lo ya cargado.</p>
+  <p class="page-subtitle">El stock de galones contra la medición, el margen por galón y el cuadro de la hoja Físico, con lo ya cargado. Tocá un número subrayado para ver de dónde sale.</p>
 </div>
 
 <div class="card">
@@ -46,9 +46,10 @@
       <span>Valor al PPP ({{ money(c.ppp, 4) }})</span><strong>{{ money(c.final_value) }}</strong>
     </div>
     <p class="cb-foot">Inicial: {{ gal(c.initial_gallons) }} gal por {{ money(c.initial_amount) }}, {{ sources.get(c.initial_source, c.initial_source) }}.</p>
-    {# Editar el inicial sin ir a Físico (pedido del usuario, 2026-11-03): el mismo guardado de Físico, que vuelve acá. #}
-    <details class="cb-edit">
-      <summary class="cb-link">Editar inventario inicial</summary>
+    {# Editar el inicial sin ir a Físico (pedido del usuario, 2026-11-03): el mismo guardado de Físico, que vuelve acá; en un cuadro flotante para no mover la página. #}
+    <button type="button" class="popover-trigger cb-link cb-edit-link" data-popover-target="cb-pop-initial">Editar inventario inicial</button>
+    <div class="popover-panel cb-pop" id="cb-pop-initial">
+      <div class="cb-pop-title">Inventario inicial de {{ month_name|lower }}</div>
       <form method="post" action="{{ url_for('fisico_ajustar_inicial') }}" class="cb-edit-form">
         <input type="hidden" name="year" value="{{ year }}">
         <input type="hidden" name="month" value="{{ month }}">
@@ -58,7 +59,7 @@
         <button type="submit" class="btn-accent">Guardar</button>
       </form>
       <p class="cb-foot">Los dos juntos. Vacíos, vuelve a tomar el final teórico del mes anterior.</p>
-    </details>
+    </div>
   </div>
 
   <div class="cb-tile">
@@ -78,29 +79,39 @@
 
   <div class="cb-tile">
     <div class="cb-tile-label">Por galón (mes)</div>
-    {# Tocando cada número se ve de dónde sale (pedido del usuario, 2026-11-03). #}
+    {# Tocando cada número se ve de dónde sale, en un cuadro flotante (pedido del usuario, 2026-11-03). #}
     <div class="cb-lines">
-      <span>Precio de venta</span><strong><button type="button" class="cb-link" data-cb-explain="cb-exp-price">{{ money(c.price, 4) }}</button></strong>
-      <span>PPP (precio de compra)</span><strong><button type="button" class="cb-link" data-cb-explain="cb-exp-ppp">{{ money(c.ppp, 4) }}</button></strong>
+      <span>Precio de venta</span><strong><button type="button" class="popover-trigger cb-link" data-popover-target="cb-pop-price">{{ money(c.price, 4) }}</button></strong>
+      <span>PPP (precio de compra)</span><strong><button type="button" class="popover-trigger cb-link" data-popover-target="cb-pop-ppp">{{ money(c.ppp, 4) }}</button></strong>
       <span class="cb-total">Margen con PPP</span><strong class="cb-total {{ 'cb-bad' if c.margin_ppp is not none and c.margin_ppp < 0 }}">{{ money(c.margin_ppp, 4) }}</strong>
-      <span class="cb-total">Margen con última compra</span><strong class="cb-total {{ 'cb-bad' if c.margin_last is not none and c.margin_last < 0 }}"><button type="button" class="cb-link" data-cb-explain="cb-exp-last">{{ money(c.margin_last, 4) }}</button></strong>
+      <span class="cb-total">Margen con última compra</span><strong class="cb-total {{ 'cb-bad' if c.margin_last is not none and c.margin_last < 0 }}"><button type="button" class="popover-trigger cb-link" data-popover-target="cb-pop-last">{{ money(c.margin_last, 4) }}</button></strong>
     </div>
-    <div class="cb-explain" id="cb-exp-price" hidden>
-      <p><strong>Precio de venta</strong> = lo vendido de combustible ÷ los galones vendidos, con los Close Store del mes{% if c.last_loaded %} (hasta el {{ dmy(c.last_loaded) }}){% endif %}.</p>
-      <p>Lo vendido es la Venta Combustible del Control Cierre: Sales Fuel + Desc. Comb de cada día.</p>
-      <p class="cb-calc">{{ money(c.fuel_sales) }} ÷ {{ gal(c.sold_gallons) }} gal = {{ money(c.price, 4) }}</p>
+    <div class="popover-panel cb-pop" id="cb-pop-price">
+      <div class="cb-pop-title">Precio de venta</div>
+      <p>Lo vendido de combustible ÷ los galones vendidos, con los Close Store del mes{% if c.last_loaded %} (hasta el {{ dmy(c.last_loaded) }}){% endif %}. Lo vendido es la Venta Combustible del Control Cierre: Sales Fuel + Desc. Comb de cada día.</p>
+      <div class="cb-calc">
+        <span>Vendido</span><strong>{{ money(c.fuel_sales) }}</strong>
+        <span>÷ Galones vendidos</span><strong>{{ gal(c.sold_gallons) }}</strong>
+        <span class="cb-calc-total">= Precio de venta</span><strong class="cb-calc-total">{{ money(c.price, 4) }}</strong>
+      </div>
     </div>
-    <div class="cb-explain" id="cb-exp-ppp" hidden>
-      <p><strong>PPP</strong> (precio promedio ponderado, el de Físico) = lo que costó todo el combustible del mes ÷ todos los galones del mes.</p>
-      <p class="cb-calc">Inventario inicial: {{ gal(c.initial_gallons) }} gal, {{ money(c.initial_amount) }}<br>
-        + Compras ({{ c.received_count }} factura{{ 's' if c.received_count != 1 }}): {{ gal(c.received_gallons) }} gal, {{ money(c.received_amount) }}<br>
-        = {{ money(c.total_amount) }} ÷ {{ gal(c.total_gallons) }} gal = {{ money(c.ppp, 4) }}</p>
-      <p>Si el inventario inicial está mal, el PPP sale mal: se corrige arriba, en Galones.</p>
+    <div class="popover-panel cb-pop" id="cb-pop-ppp">
+      <div class="cb-pop-title">PPP (precio promedio ponderado)</div>
+      <p>Lo que costó todo el combustible del mes ÷ todos los galones del mes, como en la hoja Físico.</p>
+      <div class="cb-calc cb-calc-3">
+        <span></span><em>Galones</em><em>$</em>
+        <span>Inventario inicial</span><strong>{{ gal(c.initial_gallons) }}</strong><strong>{{ money(c.initial_amount) }}</strong>
+        <span>+ Compras ({{ c.received_count }} factura{{ 's' if c.received_count != 1 }})</span><strong>{{ gal(c.received_gallons) }}</strong><strong>{{ money(c.received_amount) }}</strong>
+        <span class="cb-calc-total">= Total</span><strong class="cb-calc-total">{{ gal(c.total_gallons) }}</strong><strong class="cb-calc-total">{{ money(c.total_amount) }}</strong>
+      </div>
+      <p class="cb-calc-result">{{ money(c.total_amount) }} ÷ {{ gal(c.total_gallons) }} gal = <strong>{{ money(c.ppp, 4) }}</strong></p>
+      <p class="cb-foot">Si el inventario inicial está mal, el PPP sale mal: se corrige en Galones → Editar inventario inicial.</p>
     </div>
-    <div class="cb-explain" id="cb-exp-last" hidden>
-      <p><strong>Margen con última compra</strong>: cada día, el precio de venta del día menos el costo por galón de la última factura de J.H. recibida hasta ese día. El del mes es el promedio de los días, pesado por los galones vendidos.</p>
+    <div class="popover-panel cb-pop cb-pop-wide" id="cb-pop-last">
+      <div class="cb-pop-title">Margen con última compra</div>
+      <p>Cada día, el precio de venta del día menos el costo por galón de la última factura de J.H. recibida hasta ese día. El del mes es el promedio de los días, pesado por los galones vendidos.</p>
       {% if c.last_costs %}
-      <table class="cb-explain-table">
+      <table class="cb-pop-table">
         <thead><tr><th>Días</th><th>Factura</th><th>Costo / gal</th><th>Venta / gal</th><th>Margen</th></tr></thead>
         <tbody>
           {% for e in c.last_costs %}
@@ -117,75 +128,70 @@
 {% set s = c.sheet %}
 {% macro idm(iso) %}{{ iso[8:10] ~ '/' ~ iso[5:7] if iso else '' }}{% endmacro %}
 <div class="card">
-  <h2>Físico de {{ month_name|lower }} {{ year }}</h2>
+  <div class="cb-sheet-head">
+    <h2>Físico de {{ month_name|lower }} {{ year }}</h2>
+    <span class="cb-ppp-chip">PPP {{ money(c.ppp, 4) }}</span>
+  </div>
   <div class="historial-table-wrap">
     <table class="historial-table cb-sheet">
+      <colgroup><col><col class="cb-col-date"><col class="cb-col-date"><col class="cb-col-num"><col class="cb-col-num"><col class="cb-col-num"></colgroup>
       <thead>
-        <tr><th>Fecha factura</th><th>Vence</th><th></th><th>Galones</th><th>$</th><th>$ / gal</th></tr>
+        <tr><th></th><th>Fecha</th><th>Vence</th><th>Galones</th><th>$</th><th>$ / gal</th></tr>
       </thead>
       <tbody>
+        <tr class="cb-sheet-section"><td colspan="6">Compras del mes</td></tr>
         <tr>
-          <td></td><td></td>
           <td>Inventario Inicial Teórico <span class="cb-note">{{ sources.get(s.initial_source, s.initial_source) }}</span></td>
+          <td></td><td></td>
           <td>{{ gal(s.initial_gallons) }}</td><td>{{ money(s.initial_amount) }}</td>
-          <td>{{ money(s.initial_amount / s.initial_gallons, 4) if s.initial_gallons else '—' }}</td>
+          <td class="cb-soft">{{ money(s.initial_amount / s.initial_gallons, 4) if s.initial_gallons else '—' }}</td>
         </tr>
         {% for inv in s.invoices %}
         <tr>
-          <td>{{ idm(inv.invoice_date) }}</td><td>{{ idm(inv.due_date) }}</td>
           <td>Invoice No: {{ inv.invoice_number or '—' }}</td>
+          <td class="cb-soft">{{ idm(inv.invoice_date) }}</td><td class="cb-soft">{{ idm(inv.due_date) }}</td>
           <td>{{ gal(inv.gallons) }}</td><td>{{ money(inv.amount) }}</td>
-          <td>{{ money(inv.amount / inv.gallons, 4) if inv.gallons else '—' }}</td>
+          <td class="cb-soft">{{ money(inv.amount / inv.gallons, 4) if inv.gallons else '—' }}</td>
         </tr>
         {% endfor %}
         <tr class="cb-sheet-total">
-          <td></td><td></td><td>Total Compras</td>
+          <td>Total Compras</td><td></td><td></td>
           <td>{{ gal(s.total_gallons) }}</td><td>{{ money(s.total_amount) }}</td><td>{{ money(c.ppp, 4) }}</td>
         </tr>
-        <tr class="cb-sheet-gap"><td colspan="6"></td></tr>
+        <tr class="cb-sheet-section"><td colspan="6">Cierre del mes</td></tr>
         <tr class="cb-sheet-sales">
-          <td></td><td></td><td>Ventas</td>
+          <td>Ventas <span class="cb-note">{{ gal(-s.ventas_gallons) }} gal × PPP</span></td><td></td><td></td>
           <td>{{ gal(s.ventas_gallons) }}</td><td>{{ money(s.ventas_amount) }}</td><td>{{ money(c.ppp, 4) }}</td>
         </tr>
-        <tr class="cb-sheet-total">
-          <td></td><td></td><td>Inventario Final Teórico</td>
+        <tr class="cb-sheet-final">
+          <td>Inventario Final Teórico</td><td></td><td></td>
           <td>{{ gal(s.final_teorico_gallons) }}</td><td>{{ money(s.final_teorico_amount) }}</td><td>{{ money(c.ppp, 4) }}</td>
         </tr>
         <tr>
-          <td></td><td></td>
           <td>Inventario Final Real{% if s.real_reading_date %} <span class="cb-note">medido el {{ idm(s.real_reading_date) }}</span>{% endif %}</td>
+          <td></td><td></td>
           {% if s.real_gallons is not none %}
           <td>{{ gal(s.real_gallons) }}</td><td>{{ money(s.real_gallons * c.ppp) if c.ppp is not none else '—' }}</td><td>{{ money(c.ppp, 4) }}</td>
           {% else %}
-          <td colspan="2" class="cb-note">Sin medición cargada</td><td>{{ money(c.ppp, 4) }}</td>
+          <td colspan="3" class="cb-soft">Sin medición cargada</td>
           {% endif %}
         </tr>
         {% if s.diferencia_gallons is not none %}
-        <tr>
-          <td></td><td></td><td>Diferencia <span class="cb-note">teórico − real</span></td>
-          <td class="{{ 'cb-bad' if s.diferencia_pct is not none and s.diferencia_pct|abs > 0.01 }}">{{ gal(s.diferencia_gallons) }}</td>
-          <td>{{ money(s.diferencia_amount) }}</td><td>{{ pct(s.diferencia_pct) }}</td>
+        {% set off = s.diferencia_pct is not none and s.diferencia_pct|abs > 0.01 %}
+        <tr class="cb-sheet-diff">
+          <td>Diferencia <span class="cb-note">teórico − real</span></td><td></td><td></td>
+          <td class="{{ 'cb-bad' if off }}">{{ gal(s.diferencia_gallons) }}</td>
+          <td class="{{ 'cb-bad' if off }}">{{ money(s.diferencia_amount) }}</td>
+          <td><span class="cb-pct {{ 'cb-pct-bad' if off else 'cb-pct-ok' }}">{{ pct(s.diferencia_pct) }}</span></td>
         </tr>
         {% endif %}
       </tbody>
     </table>
   </div>
-  <p class="cb-foot">Las ventas son los galones de los Close Store del mes{% if c.last_loaded %} (hasta el {{ dmy(c.last_loaded) }}){% endif %}, valuadas al PPP como en la hoja: {{ gal(-s.ventas_gallons) }} gal × {{ money(c.ppp, 4) }}. Las facturas se cargan en Carga de Datos → Combustible.</p>
+  <p class="cb-foot">Las ventas son los galones de los Close Store del mes{% if c.last_loaded %} (hasta el {{ dmy(c.last_loaded) }}){% endif %}, valuadas al PPP como en la hoja. Las facturas se cargan en Carga de Datos → Combustible.</p>
 </div>
 
 {% endif %}
-
-<script>
-  // Las explicaciones de los precios por galón: un toque abre, otro cierra.
-  document.querySelectorAll("[data-cb-explain]").forEach(function (button) {
-    button.addEventListener("click", function () {
-      var box = document.getElementById(button.dataset.cbExplain);
-      var open = box.hidden;
-      document.querySelectorAll(".cb-explain").forEach(function (other) { other.hidden = true; });
-      box.hidden = !open;
-    });
-  });
-</script>
 
 <style>
   .historial-nav { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
@@ -197,13 +203,50 @@
   .historial-table th, .historial-table td { padding: 8px 14px; text-align: left; white-space: nowrap; vertical-align: top; }
   .historial-table thead th { background: var(--accent-soft); font-weight: 700; border-bottom: 1px solid var(--border); vertical-align: bottom; }
   .historial-table tbody tr:nth-child(even) { background: var(--surface-alt); }
+
+  /* Cuadro Físico (como la hoja del Cierre) y cuadros flotantes de las explicaciones (2026-11-03). */
+  .cb-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .cb-sheet-head h2 { margin: 0; }
+  .cb-ppp-chip { padding: 4px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .cb-sheet { font-size: 13.5px; }
+  .cb-sheet .cb-col-date { width: 70px; }
+  .cb-sheet .cb-col-num { width: 140px; }
+  .cb-sheet thead th { background: var(--surface); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-soft); border-bottom: 1px solid var(--border); }
   .cb-sheet th:nth-child(n+4), .cb-sheet td:nth-child(n+4) { text-align: right; font-variant-numeric: tabular-nums; }
   .cb-sheet tbody tr:nth-child(even) { background: none; }
-  .cb-sheet tbody td { border-bottom: 1px solid var(--border); }
-  .cb-sheet-total td { font-weight: 700; background: var(--accent-soft); }
-  .cb-sheet-sales td { font-weight: 700; color: var(--error); }
-  .cb-sheet-gap td { padding: 4px; border-bottom: 0; }
+  .cb-sheet tbody td { border-bottom: 1px solid var(--border); padding-top: 9px; padding-bottom: 9px; }
+  .cb-sheet tbody tr:last-child td { border-bottom: 0; }
+  .cb-sheet tbody tr.cb-sheet-section td { padding: 14px 14px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); background: var(--surface-alt); }
+  .cb-sheet-total td { font-weight: 700; border-top: 2px solid var(--border); }
+  .cb-sheet-sales td { color: var(--error); }
+  .cb-sheet-sales td:first-child { font-weight: 600; }
+  .cb-sheet-final td { font-weight: 700; background: var(--accent-soft); }
+  .cb-sheet-diff td:first-child { font-weight: 600; }
+  .cb-soft { color: var(--text-soft); }
+  .cb-pct { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+  .cb-pct-ok { background: var(--success-soft); color: var(--success); }
+  .cb-pct-bad { background: var(--error-soft); color: var(--error); }
   .cb-note { font-size: 11.5px; font-weight: 400; color: var(--text-soft); margin-left: 4px; }
+
+  button.cb-edit-link { display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 400; }
+  .cb-pop { width: 340px; max-width: calc(100vw - 16px); padding: 12px 14px; font-size: 12.5px; line-height: 1.5; }
+  .cb-pop-wide { width: 460px; }
+  .cb-pop p { margin: 0 0 8px; }
+  .cb-pop-title { font-weight: 700; font-size: 13.5px; margin-bottom: 6px; color: var(--accent); }
+  .cb-calc { display: grid; grid-template-columns: 1fr auto; gap: 3px 14px; padding: 8px 10px; border-radius: 8px; background: var(--surface-alt); font-variant-numeric: tabular-nums; margin-bottom: 8px; }
+  .cb-calc-3 { grid-template-columns: 1fr auto auto; }
+  .cb-calc strong, .cb-calc em { text-align: right; font-weight: 600; }
+  .cb-calc em { font-style: normal; font-size: 11px; color: var(--text-soft); text-transform: uppercase; }
+  .cb-calc .cb-calc-total { padding-top: 3px; border-top: 1px solid var(--border); font-weight: 700; }
+  .cb-calc-result { font-variant-numeric: tabular-nums; }
+  .cb-edit-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
+  .cb-edit-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-soft); }
+  .cb-edit-form input { width: 120px; }
+  .cb-edit-form button { margin: 0; }
+  .cb-pop-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .cb-pop-table th { font-size: 11px; color: var(--text-soft); font-weight: 700; border-bottom: 1px solid var(--border); }
+  .cb-pop-table th, .cb-pop-table td { padding: 4px 6px; text-align: right; white-space: nowrap; }
+  .cb-pop-table th:first-child, .cb-pop-table td:first-child, .cb-pop-table th:nth-child(2), .cb-pop-table td:nth-child(2) { text-align: left; }
 
   .cb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin-bottom: 18px; }
   .cb-tile { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 14px 16px; box-shadow: var(--shadow-sm); }
@@ -218,19 +261,6 @@
   .cb-bad { color: var(--error); }
   .cb-warn { color: var(--warning); }
   .cb-link { background: none; border: 0; padding: 0; margin: 0; box-shadow: none; font: inherit; font-weight: inherit; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
-  .cb-edit { margin-top: 8px; font-size: 12.5px; }
-  .cb-edit > summary { list-style: none; display: inline; font-size: 12.5px; }
-  .cb-edit > summary::-webkit-details-marker { display: none; }
-  .cb-edit-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 8px; }
-  .cb-edit-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-soft); }
-  .cb-edit-form input { width: 110px; }
-  .cb-explain { overflow-x: auto; margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); font-size: 12.5px; line-height: 1.5; }
-  .cb-explain p { margin: 0 0 6px; }
-  .cb-explain p:last-child { margin-bottom: 0; }
-  .cb-calc { font-variant-numeric: tabular-nums; font-weight: 600; }
-  .cb-explain-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
-  .cb-explain-table th, .cb-explain-table td { padding: 3px 4px; text-align: right; white-space: nowrap; }
-  .cb-explain-table th:first-child, .cb-explain-table td:first-child { text-align: left; }
   .cb-chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
   .cb-chip-ok { background: var(--success-soft); color: var(--success); }
   .cb-chip-pendiente { background: var(--surface-alt); color: var(--text-soft); border: 1px solid var(--border); }

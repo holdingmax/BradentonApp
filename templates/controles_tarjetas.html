@@ -41,13 +41,16 @@
   .tc-wrap { white-space: normal !important; min-width: 160px; }
   .tc-diff { color: #B91C1C; font-weight: 700; }
   .tc-pending { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
-  .tc-pending-ddc > summary { list-style: none; font-size: 15px; font-weight: 700; }
-  .tc-pending-ddc > summary::-webkit-details-marker { display: none; }
+  .tc-pending-line { font-size: 15px; font-weight: 700; }
+  .tc-pop { width: 620px; max-width: calc(100vw - 16px); max-height: 70vh; overflow: auto; padding: 12px 14px; }
+  .tc-pop-title { font-weight: 700; font-size: 13.5px; color: var(--accent); margin-bottom: 4px; }
+  .tc-pop .tc-table-wrap { margin-top: 8px; }
+  .tc-pop .tc-table { min-width: 0; font-size: 12.5px; }
+  .tc-pop .tc-table th, .tc-pop .tc-table td { padding: 6px 10px; }
+  .tc-pop .tc-table td.tc-left, .tc-pop .tc-table th.tc-left { text-align: left; }
+  button.tc-link { background: none; border: 0; padding: 0; margin: 0; box-shadow: none; font: inherit; font-weight: 700; }
   .tc-link { text-decoration: underline; text-underline-offset: 3px; color: var(--accent); font-variant-numeric: tabular-nums; }
   .tc-sub-inline { font-size: 12.5px; font-weight: 400; color: var(--text-soft); margin-left: 6px; }
-  .tc-pending-ddc .tc-table-wrap { margin-top: 10px; }
-  .tc-pending-ddc .tc-table { min-width: 560px; }
-  .tc-pending-ddc .tc-table td.tc-left, .tc-pending-ddc .tc-table th.tc-left { text-align: left; }
   .tc-totals { margin-top: 10px; }
 </style>
 {% endblock %}
@@ -81,8 +84,10 @@
   {% set last = control.last %}
   <div class="tc-pending">
     {% if last %}
-    <details class="tc-pending-ddc">
-      <summary>Pendiente de acreditar al {{ ddmm(last.date) }}: <span class="tc-link">{{ money(last.pending) }}</span> <span class="tc-sub-inline">vendido con tarjeta que todavía no era DDC</span></summary>
+    <div class="tc-pending-ddc">
+      <div class="tc-pending-line">Pendiente de acreditar al {{ ddmm(last.date) }}: <button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-sales">{{ money(last.pending) }}</button> <span class="tc-sub-inline">vendido con tarjeta que todavía no era DDC</span></div>
+      <div class="popover-panel tc-pop" id="tc-pop-sales">
+      <div class="tc-pop-title">DDC que trajeron lo vendido hasta el {{ ddmm(last.date) }}</div>
       {% if next_month_ddc %}
       <div class="tc-table-wrap">
         <table class="tc-table">
@@ -108,10 +113,13 @@
       {% else %}
       <p class="tc-note">Todavía no llegaron los DDC de estas ventas (o falta cargar el detalle de cupones).</p>
       {% endif %}
-    </details>
+      </div>
+    </div>
     {% endif %}
-    <details class="tc-pending-ddc">
-      <summary>DDC sin aplicar en un EFT al {{ pending_until.strftime('%d/%m') }}: <span class="tc-link">{{ money(pending_ddc_totals.net) }}</span>{% if pending_ddc %} <span class="tc-sub-inline">{{ pending_ddc|length }} DDC, Gross {{ money(pending_ddc_totals.gross) }}</span>{% endif %}</summary>
+    <div class="tc-pending-ddc">
+      <div class="tc-pending-line">DDC sin aplicar en un EFT al {{ pending_until.strftime('%d/%m') }}: <button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-ddc">{{ money(pending_ddc_totals.net) }}</button>{% if pending_ddc %} <span class="tc-sub-inline">{{ pending_ddc|length }} DDC, Gross {{ money(pending_ddc_totals.gross) }}</span>{% endif %}</div>
+      <div class="popover-panel tc-pop" id="tc-pop-ddc">
+      <div class="tc-pop-title">DDC sin aplicar en un EFT al {{ pending_until.strftime('%d/%m') }}</div>
       {% if pending_ddc %}
       <div class="tc-table-wrap">
         <table class="tc-table">
@@ -134,7 +142,8 @@
       {% else %}
       <p class="tc-note">No hay DDC sin EFT al {{ pending_until.strftime('%d/%m') }}.</p>
       {% endif %}
-    </details>
+      </div>
+    </div>
   </div>
   {% if control.kia_not_in_cards %}
   <p class="tc-note tc-diff">Pago de Kia/Toyota que no aparece en tarjetas: {% for k in control.kia_not_in_cards %}{{ ddmm(k.date) }} (LOCAL ACCT {{ money(k.kia) }}, tarjetas del día {{ money(k.sale) }}){{ ", " if not loop.last else "." }}{% endfor %}</p>
