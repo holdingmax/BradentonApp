@@ -1,28 +1,24 @@
 """
 Control de combustible (Controles, pedido del usuario, 2026-10-26).
 
-Tres partes, con lo ya cargado:
+Con lo ya cargado:
   - Galones: stock teórico día por día (inventario inicial de Físico +
     facturas de J.H. recibidas - galones vendidos de Store Info), y la medición
     del mes contra el teórico del día en que se midió (Físico la compara con el
     de fin de mes). Se toma la medición como al cierre de ese día.
-  - Facturas de combustible contra los EFT: cada factura del mes con el EFT que
-    la pagó (por el número, como Próximos EFT), y las facturas grandes que pagó
-    un EFT del mes y no están cargadas en Físico ni en Facturas varias.
   - Precio y margen por galón: el precio de venta de cada día contra el PPP del
     mes (el de Físico y Proyecciones) y contra el costo de la última factura
     recibida hasta ese día (reposición).
+  - El cuadro de la hoja Fisico del Cierre (`sheet`, fisico.build_month_report).
+Las facturas contra los EFT salieron el 2026-11-03 (pedido del usuario).
 """
 
 import calendar
 import datetime as dt
 
-import eft_db
 import fisico
 import fisico_db
-import jh_facturas_db
 import reportes_db
-from eft_pronostico import FUEL_INVOICE_MIN, _digits, next_business_day
 
 
 def _ratio(num, den):
@@ -31,64 +27,6 @@ def _ratio(num, den):
 
 def _cost_per_gallon(invoice):
     return _ratio(invoice.get("amount"), invoice.get("gallons"))
-
-
-def _paid_by_eft():
-    """{número de factura (solo dígitos): [{rcv, date, amount}]} de todos los EFT cargados, y el último EFT."""
-    paid, last_eft = {}, None
-    for dep in eft_db.list_deposits_with_lines():
-        eft_date = dep["eft_date"]
-        if eft_date is not None and (last_eft is None or eft_date > last_eft):
-            last_eft = eft_date
-        for line in dep["invoices"]:
-            paid.setdefault(_digits(line["invoice"]), []).append(
-                {"rcv": dep["rcv_number"], "date": eft_date, "invoice": line["invoice"],
-                 "amount": line["paid_amount"] or 0.0})
-    return paid, last_eft
-
-
-def _invoices_vs_eft(year, month, invoices):
-    paid, last_eft = _paid_by_eft()
-    rows = []
-    for inv in invoices:
-        payments = paid.get(_digits(inv["invoice_number"]), [])
-        paid_total = round(sum(p["amount"] for p in payments), 2)
-        due = dt.date.fromisoformat(inv["due_date"]) if inv.get("due_date") else None
-        eft_day = next_business_day(due) if due else None
-        if payments:
-            diff = round(paid_total - (inv["amount"] or 0.0), 2)
-            status = "ok" if abs(diff) < 0.01 else "diferencia"
-        else:
-            diff = None
-            # Vencida: ya hay EFT cargados de después del día en que J.H. la tenía que cobrar.
-            status = "vencida" if (eft_day and last_eft and last_eft >= eft_day) else "pendiente"
-        rows.append({
-            "date": dt.date.fromisoformat(inv["invoice_date"]),
-            "number": inv["invoice_number"],
-            "gallons": inv["gallons"],
-            "amount": inv["amount"],
-            "cost_gal": _cost_per_gallon(inv),
-            "due": due,
-            "eft_day": eft_day,
-            "payments": payments,
-            "paid_total": paid_total if payments else None,
-            "diff": diff,
-            "status": status,
-        })
-
-    # Lo que pagó un EFT del mes y no está cargado: las facturas grandes (las de
-    # combustible) que no son de Físico ni de Facturas varias.
-    known = {_digits(i["invoice_number"]) for i in fisico_db.list_all_invoices()}
-    known |= {_digits(i["invoice_number"]) for i in jh_facturas_db.list_all_invoices()}
-    missing = []
-    for number, payments in paid.items():
-        for p in payments:
-            if (number not in known and p["amount"] >= FUEL_INVOICE_MIN and p["date"] is not None
-                    and (p["date"].year, p["date"].month) == (year, month)):
-                missing.append(p)
-    missing.sort(key=lambda p: (p["date"], p["invoice"]))
-    return {"rows": rows, "missing": missing, "last_eft": last_eft,
-            "problems": sum(1 for r in rows if r["status"] in ("diferencia", "vencida")) + len(missing)}
 
 
 def _last_purchase_before(day, all_invoices):
@@ -168,6 +106,8 @@ def build_control(year, month):
         entry["price"] = _ratio(entry["sales"], entry["sold"])
         entry["margin"] = entry["price"] - entry["cost"] if entry["price"] is not None else None
 
+    final_stock = days[-1]["stock"] if days else round(report["initial_gallons"] or 0.0, 2)
+
     reading = None
     if report["real_gallons"] is not None:
         reading_date = dt.date.fromisoformat(report["real_reading_date"]) if report["real_reading_date"] else None
@@ -176,7 +116,8 @@ def build_control(year, month):
         cut = reading_date if (reading_date and reading_date <= month_end) else month_end
         at_cut = [d for d in days if cut and d["date"] <= cut]
         theoretical = at_cut[-1]["stock"] if at_cut else round(report["initial_gallons"] or 0.0, 2)
-        diff = round(report["real_gallons"] - theoretical, 2)
+        # Teórico menos real, como la hoja Fisico (positivo = falta combustible).
+        diff = round(theoretical - report["real_gallons"], 2)
         reading = {
             "date": reading_date,
             "cut": cut,
@@ -203,7 +144,9 @@ def build_control(year, month):
         "sold_gallons": round(sold_total, 2),
         "fuel_sales": round(sales_total, 2),
         "last_costs": last_costs,
-        "final_stock": days[-1]["stock"] if days else round(report["initial_gallons"] or 0.0, 2),
+        "final_stock": final_stock,
+        # El valor del stock teórico al PPP, como el Inventario Final Teórico de Físico.
+        "final_value": round(final_stock * ppp, 2) if ppp is not None else None,
         "last_loaded": last_loaded,
         "ppp": ppp,
         "price": price_month,
@@ -211,5 +154,6 @@ def build_control(year, month):
         "margin_last": margin_last_month,
         "days": days,
         "reading": reading,
-        "eft": _invoices_vs_eft(year, month, invoices),
+        # El cuadro como la hoja Fisico del Cierre (pedido del usuario, 2026-11-03).
+        "sheet": report,
     }
