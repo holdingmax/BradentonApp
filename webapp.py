@@ -7317,13 +7317,42 @@ def _card_detail_by_day(year, month, detail_groups, today=None):
     )
 
 
+def _ddc_pending(year, month, today):
+    """
+    Para la conciliación (pedido de Leti, 2026-11-03), los DDC de los dos
+    pendientes al cierre del mes: los del mes siguiente que trajeron lo
+    vendido con tarjeta que todavía no era DDC, y los que ningún EFT pagó
+    todavía. Lo usan Controles → Tarjetas y la botonera.
+    """
+    cupones_view = eft_db.cupones_month_view(year, month)
+    month_end = date(year, month, calendar.monthrange(year, month)[1])
+    # Un depósito del mes siguiente trae a veces, aparte, un DDC chico con
+    # batches de su propio día ("slri…", 01/10/2026 $59.43): no es venta del
+    # mes y no va en el desglose.
+    next_month_ddc = []
+    for group in cupones_view["next_month"]:
+        other = round((group["group_gross"] or 0.0) - group["gross"], 2)
+        rows = [r for r in group["ddc_rows"] if not (other > 0.005 and r["gross"] is not None and abs(r["gross"] - other) < 0.01)]
+        next_month_ddc.append({**group, "ddc_rows": rows or group["ddc_rows"]})
+    return {
+        "next_month_ddc": next_month_ddc,
+        "next_month_totals": {
+            key: round(sum(r[key] or 0.0 for g in next_month_ddc for r in g["ddc_rows"]), 2) for key in ("gross", "net")
+        },
+        "pending_ddc": cupones_view["pending"],
+        "pending_ddc_totals": cupones_view["pending_totals"],
+        "pending_until": min(month_end, today),
+    }
+
+
 @app.route("/controles/tarjetas")
 def controles_tarjetas():
     """
     Control Tarjetas y Cupones (pedido del usuario, 2026-10-02): lo vendido
-    con tarjeta en el C-store contra los cupones que acredita JH. Lo que
-    todavía no se acreditó (unos 3 días por las 72 hs) no debería pasar de
-    $15,000. Cálculo en control_tarjetas.py.
+    con tarjeta en el C-store contra los cupones que acredita JH. Desde el
+    2026-11-03 (pedido de Leti) es para armar la conciliación: sin cuadros de
+    aviso, con los DDC pendientes de un EFT y los reportes de J.H. Cálculo en
+    control_tarjetas.py y eft_db.cupones_month_view.
     """
     today = date.today()
     year, month = _cierre_month()
@@ -7334,17 +7363,13 @@ def controles_tarjetas():
     for row in control["rows"]:
         row["date_display"] = _fmt_ddmmyyyy(row["date"])
     detail_groups = eft_db.get_detail_groups()
-    detail = _card_detail_by_day(year, month, detail_groups, today)
-    if detail:
-        for row in detail["rows"]:
-            row["date_display"] = _fmt_ddmmyyyy(row["date"])
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
     next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
     return render_template(
         "controles_tarjetas.html",
         control=control,
         missing_days_display=[_fmt_ddmmyyyy(d) for d in control["missing_days"]],
-        detail=detail,
+        **_ddc_pending(year, month, today),
         jh=_jh_month_checks(year, month, detail_groups),
         jh_labels=jh_mensual.KIND_LABELS,
         year=year,
@@ -7559,8 +7584,9 @@ def controles_rapidos_panel(kind):
         # Próximos EFT (pedido del usuario, 2026-10-13): no depende del mes.
         data = {"forecast": eft_pronostico.build_forecast(today=today), "weekdays": _WEEKDAYS_ES}
     elif kind == "portales":
-        # Portales (pedido del usuario, 2026-10-15): cuándo entrar a bajar
-        # las facturas de FPL, Manatee y Airgas. No depende del mes.
+        # Portales (pedido del usuario, 2026-10-15; en pantalla "Servicios"
+        # desde el 2026-11-03): cuándo entrar a bajar las facturas de FPL,
+        # Manatee y Airgas. No depende del mes.
         data = controles_rapidos.portales_status(
             {key: proveedores_db.get_supplier_invoices(key) for key in ("fpl", "manatee_county", "airgas")},
             today=today,
@@ -7578,6 +7604,8 @@ def controles_rapidos_panel(kind):
             reportes_db.get_card_sales_by_date(), eft_db.get_coupon_gross_by_date(), today=day,
             kia_sales=reportes_db.get_local_account_sales_by_date(),
         )
+        if data:
+            data.update(_ddc_pending(year, month, today))
     elif kind == "caja":
         data = controles_rapidos.caja_status(today=day)
     elif kind == "precios":

@@ -55,7 +55,7 @@
 {% elif kind == "portales" %}
   {# El ámbar va solo acá adentro: el botón de la botonera no lleva marcas (pedido del usuario, 2026-10-15). #}
   <div class="qc-status {{ 'warn' if data.pending else 'ok' }}">
-    <span>{{ "Para revisar en los portales" if data.pending else "Todo lo de los portales está cargado" }}</span>
+    <span>{{ "Servicios para revisar" if data.pending else "Todos los servicios están cargados" }}</span>
     {% if data.pending %}<strong>{{ data.pending }}</strong>{% endif %}
   </div>
   <table class="qc-table qc-table-portales">
@@ -71,24 +71,30 @@
     {% endfor %}
     </tbody>
   </table>
-  <p class="qc-note">Las fechas salen de cuándo publicó cada portal sus facturas en 2025-2026. El portal se abre en otra pestaña y entrás con tu usuario; lo bajado se carga en Proveedores.</p>
+  <p class="qc-note">Las fechas salen de cuándo publicó cada servicio sus facturas en 2025-2026. Su portal se abre en otra pestaña y entrás con tu usuario; lo bajado se carga en Proveedores.</p>
 
 {% elif kind == "tarjetas" %}
   {% if not data %}
   {{ empty_month("ventas con tarjeta cargadas (Store Info del Reporte Diario)", "controles_tarjetas") }}
   {% else %}
   {% set last = data.last %}
-  <div class="qc-status {{ 'bad' if last.status == 'alert' else 'ok' }}">
+  {# Los dos pendientes de la conciliación, como en Controles → Tarjetas (pedido de Leti, 2026-11-03). #}
+  <div class="qc-status neutral">
     <span>Pendiente de acreditar al {{ dmy(last.date) }}</span>
     <strong>{{ money(last.pending) }}</strong>
-    <span class="qc-sub">En camino {{ money(last.in_transit) }}{% if last.kia_recent %} (Kia/Toyota {{ money(last.kia_recent) }}){% endif %}, atrasado {{ money(last.overdue) }}: {{ "pasa" if last.status == "alert" else "no pasa" }} el límite de {{ money(data.threshold) }}</span>
+    <span class="qc-sub">Vendido con tarjeta que todavía no era DDC.{% if data.next_month_ddc %} Lo trajeron: {% for g in data.next_month_ddc %}{% for r in g.ddc_rows %}{{ r.coupon }} ({{ dm_date(g.deposit) if g.deposit else "—" }}, {{ money(r.gross) }}){{ ", " if not loop.last }}{% endfor %}{{ ", " if not loop.last else "." }}{% endfor %}{% endif %}</span>
+  </div>
+  <div class="qc-status neutral" style="margin-top: 8px;">
+    <span>DDC sin aplicar en un EFT al {{ dm_date(data.pending_until) }}</span>
+    <strong>{{ money(data.pending_ddc_totals.net) }}</strong>
+    <span class="qc-sub">{% if data.pending_ddc %}{% for r in data.pending_ddc %}{{ r.coupons|join(", ") }} ({{ r.date_display[:5] }}, {{ money(r.net) }}){{ ", " if not loop.last else "." }}{% endfor %}{% else %}Ninguno.{% endif %}</span>
   </div>
   {{ behind(data.days_behind, last.date) }}
   <table class="qc-table">
-    <thead><tr><th>Día</th><th>Tarjeta</th><th>Cupones</th><th>Pendiente</th></tr></thead>
+    <thead><tr><th>Día</th><th>Tarjeta</th><th>Cupones</th><th>Sin DDC</th></tr></thead>
     <tbody>
     {% for row in data.recent %}
-      <tr class="{{ 'qc-row-bad' if row.status == 'alert' else ('qc-row-off' if row.status == 'missing' else '') }}">
+      <tr class="{{ 'qc-row-off' if row.status == 'missing' else '' }}">
         <td>{{ dm(row.date) }}</td>
         <td>{{ money(row.sale) if row.sale is not none else "sin cargar" }}{% if row.kia %}<span class="qc-sub" style="display:block">Kia/Toyota {{ money(row.kia) }}</span>{% endif %}</td>
         <td>{{ money(row.coupon_gross) if row.coupon_gross else "—" }}</td>
