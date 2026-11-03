@@ -2814,3 +2814,7 @@ Texto completo, sin cambios, de la sección "Estado actual" de `CLAUDE.md` hasta
     - **DDC sin aplicar en un EFT**: los DDC que ningún EFT pagó hasta fin de mes, con el EFT que los aplicó después. Septiembre: 5 DDC, $6.189,28 neto, lo mismo que el Excel de DDC.
   - Los reportes de J.H. quedaron con los totales en una línea (rojo solo si algo no coincide) y las tablas de EFT y Facturas abiertas.
 - **Botonera**: Tarjetas muestra los mismos dos pendientes con sus DDC; "Portales" pasó a llamarse **Servicios** (la clave interna sigue siendo `portales`).
+- **Control de combustible** (`/controles/combustible`):
+  - El inventario inicial (galones y monto) se edita desde el cuadro "Galones" con el mismo guardado de Físico (`/fisico/inicial` con `return_to=combustible`, que vuelve al control). Se muestra también el monto del inicial.
+  - El precio de venta, el PPP y el margen con última compra se tocan y explican su cuenta con los números del mes (`control_combustible`: `fuel_sales`, `total_gallons`/`total_amount`, `last_costs` con la factura usada de costo por tramo de días). Septiembre en la PC: $175.365,42 ÷ 41.541,65 gal = $4,2214; ($42.000 + $170.648,58) ÷ 63.206 gal = $3,3644 (con el inicial de prueba).
+  - Se sacó el cuadro día por día (el cálculo sigue, lo usan los cuadros de arriba).
