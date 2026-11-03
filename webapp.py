@@ -2150,9 +2150,12 @@ def fisico_ajustar_inicial():
 
     # Galones y monto van juntos (los dos para guardar, los dos vacíos para
     # borrar): con uno solo el Inicial quedaba a medias sin aviso.
+    # También se edita desde Controles → Combustible (pedido del usuario,
+    # 2026-11-03): vuelve a esa página.
+    back_endpoint = "controles_combustible" if request.form.get("return_to") == "combustible" else "fisico_view"
     if bool(gallons_raw) != bool(amount_raw):
         flash("Cargá los galones y el monto juntos (o dejá los dos vacíos para borrar el ajuste).", "error")
-        return redirect(url_for("fisico_view", year=year, month=month))
+        return redirect(url_for(back_endpoint, year=year, month=month))
 
     try:
         gallons_value = float(gallons_raw) if gallons_raw else None
@@ -2162,7 +2165,7 @@ def fisico_ajustar_inicial():
     except ValueError:
         flash("No se pudo guardar: revisá que los galones/monto sean números válidos.", "error")
 
-    return redirect(url_for("fisico_view", year=year, month=month))
+    return redirect(url_for(back_endpoint, year=year, month=month))
 
 
 @app.route("/fisico/lectura-real", methods=["POST"])

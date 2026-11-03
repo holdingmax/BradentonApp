@@ -45,7 +45,20 @@
       <span>− Vendido</span><strong>{{ gal(c.sold_gallons) }}</strong>
       <span class="cb-total">= Stock teórico{% if c.last_loaded %} al {{ dmy(c.last_loaded) }}{% endif %}</span><strong class="cb-total {{ 'cb-bad' if c.final_stock < 0 }}">{{ gal(c.final_stock) }}</strong>
     </div>
-    <p class="cb-foot">Inicial: {{ sources.get(c.initial_source, c.initial_source) }}.</p>
+    <p class="cb-foot">Inicial: {{ gal(c.initial_gallons) }} gal por {{ money(c.initial_amount) }}, {{ sources.get(c.initial_source, c.initial_source) }}.</p>
+    {# Editar el inicial sin ir a Físico (pedido del usuario, 2026-11-03): el mismo guardado de Físico, que vuelve acá. #}
+    <details class="cb-edit">
+      <summary class="cb-link">Editar inventario inicial</summary>
+      <form method="post" action="{{ url_for('fisico_ajustar_inicial') }}" class="cb-edit-form">
+        <input type="hidden" name="year" value="{{ year }}">
+        <input type="hidden" name="month" value="{{ month }}">
+        <input type="hidden" name="return_to" value="combustible">
+        <label>Galones <input type="number" step="0.01" name="initial_gallons" value="{{ c.initial_gallons if c.initial_source == 'manual' else '' }}" placeholder="{{ '%.2f'|format(c.initial_gallons or 0) }}"></label>
+        <label>Monto $ <input type="number" step="0.01" name="initial_amount" value="{{ c.initial_amount if c.initial_source == 'manual' else '' }}" placeholder="{{ '%.2f'|format(c.initial_amount or 0) }}"></label>
+        <button type="submit" class="btn-accent">Guardar</button>
+      </form>
+      <p class="cb-foot">Los dos juntos. Vacíos, vuelve a tomar el final teórico del mes anterior.</p>
+    </details>
   </div>
 
   <div class="cb-tile">
@@ -76,13 +89,38 @@
 
   <div class="cb-tile">
     <div class="cb-tile-label">Por galón (mes)</div>
+    {# Tocando cada número se ve de dónde sale (pedido del usuario, 2026-11-03). #}
     <div class="cb-lines">
-      <span>Precio de venta</span><strong>{{ money(c.price, 4) }}</strong>
-      <span>PPP</span><strong>{{ money(c.ppp, 4) }}</strong>
+      <span>Precio de venta</span><strong><button type="button" class="cb-link" data-cb-explain="cb-exp-price">{{ money(c.price, 4) }}</button></strong>
+      <span>PPP (precio de compra)</span><strong><button type="button" class="cb-link" data-cb-explain="cb-exp-ppp">{{ money(c.ppp, 4) }}</button></strong>
       <span class="cb-total">Margen con PPP</span><strong class="cb-total {{ 'cb-bad' if c.margin_ppp is not none and c.margin_ppp < 0 }}">{{ money(c.margin_ppp, 4) }}</strong>
-      <span class="cb-total">Margen con última compra</span><strong class="cb-total {{ 'cb-bad' if c.margin_last is not none and c.margin_last < 0 }}">{{ money(c.margin_last, 4) }}</strong>
+      <span class="cb-total">Margen con última compra</span><strong class="cb-total {{ 'cb-bad' if c.margin_last is not none and c.margin_last < 0 }}"><button type="button" class="cb-link" data-cb-explain="cb-exp-last">{{ money(c.margin_last, 4) }}</button></strong>
     </div>
-    <p class="cb-foot">El de última compra usa, cada día, el costo de la última factura recibida hasta ese día.</p>
+    <div class="cb-explain" id="cb-exp-price" hidden>
+      <p><strong>Precio de venta</strong> = lo vendido de combustible ÷ los galones vendidos, con los Close Store del mes{% if c.last_loaded %} (hasta el {{ dmy(c.last_loaded) }}){% endif %}.</p>
+      <p>Lo vendido es la Venta Combustible del Control Cierre: Sales Fuel + Desc. Comb de cada día.</p>
+      <p class="cb-calc">{{ money(c.fuel_sales) }} ÷ {{ gal(c.sold_gallons) }} gal = {{ money(c.price, 4) }}</p>
+    </div>
+    <div class="cb-explain" id="cb-exp-ppp" hidden>
+      <p><strong>PPP</strong> (precio promedio ponderado, el de Físico) = lo que costó todo el combustible del mes ÷ todos los galones del mes.</p>
+      <p class="cb-calc">Inventario inicial: {{ gal(c.initial_gallons) }} gal, {{ money(c.initial_amount) }}<br>
+        + Compras ({{ c.received_count }} factura{{ 's' if c.received_count != 1 }}): {{ gal(c.received_gallons) }} gal, {{ money(c.received_amount) }}<br>
+        = {{ money(c.total_amount) }} ÷ {{ gal(c.total_gallons) }} gal = {{ money(c.ppp, 4) }}</p>
+      <p>Si el inventario inicial está mal, el PPP sale mal: se corrige arriba, en Galones.</p>
+    </div>
+    <div class="cb-explain" id="cb-exp-last" hidden>
+      <p><strong>Margen con última compra</strong>: cada día, el precio de venta del día menos el costo por galón de la última factura de J.H. recibida hasta ese día. El del mes es el promedio de los días, pesado por los galones vendidos.</p>
+      {% if c.last_costs %}
+      <table class="cb-explain-table">
+        <thead><tr><th>Días</th><th>Factura</th><th>Costo / gal</th><th>Venta / gal</th><th>Margen</th></tr></thead>
+        <tbody>
+          {% for e in c.last_costs %}
+          <tr><td>{{ dmy(e.from) }}{% if e.to != e.from %} al {{ dmy(e.to) }}{% endif %}</td><td>{{ e.number }}</td><td>{{ money(e.cost, 4) }}</td><td>{{ money(e.price, 4) }}</td><td>{{ money(e.margin, 4) }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
   </div>
 </div>
 
@@ -130,34 +168,19 @@
   {% endif %}
 </div>
 
-<div class="card">
-  <h2>Día por día</h2>
-  <div class="historial-table-wrap">
-    <table class="historial-table cb-num">
-      <thead>
-        <tr>
-          <th>Día</th><th>Recibido</th><th>Vendido</th><th>Stock teórico</th>
-          <th>Precio / gal</th><th>Margen con PPP</th><th>Última compra / gal</th><th>Margen con última compra</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for d in c.days %}
-        <tr class="{{ 'cb-row-reading' if r and d.date == r.cut }}">
-          <td>{{ dmy(d.date) }}{% if r and d.date == r.cut %} <span class="cb-chip cb-chip-pendiente">medición</span>{% endif %}</td>
-          <td>{% if d.received %}{{ gal(d.received) }}<span class="cb-sub">{{ d.invoices|join(', ') }}</span>{% endif %}</td>
-          <td>{{ gal(d.sold) }}</td>
-          <td class="{{ 'cb-bad' if d.stock < 0 }}"><strong>{{ gal(d.stock) }}</strong></td>
-          <td>{{ money(d.price, 4) }}</td>
-          <td class="{{ 'cb-bad' if d.margin_ppp is not none and d.margin_ppp < 0 }}">{{ money(d.margin_ppp, 4) }}</td>
-          <td>{{ money(d.last_cost, 4) }}</td>
-          <td class="{{ 'cb-bad' if d.margin_last is not none and d.margin_last < 0 }}">{{ money(d.margin_last, 4) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
 {% endif %}
+
+<script>
+  // Las explicaciones de los precios por galón: un toque abre, otro cierra.
+  document.querySelectorAll("[data-cb-explain]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var box = document.getElementById(button.dataset.cbExplain);
+      var open = box.hidden;
+      document.querySelectorAll(".cb-explain").forEach(function (other) { other.hidden = true; });
+      box.hidden = !open;
+    });
+  });
+</script>
 
 <style>
   .historial-nav { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
@@ -183,7 +206,20 @@
   .cb-subtitle { margin: 22px 0 4px; font-size: 15px; }
   .cb-bad { color: var(--error); }
   .cb-warn { color: var(--warning); }
-  .cb-row-reading td { background: var(--accent-soft); }
+  .cb-link { background: none; border: 0; padding: 0; margin: 0; box-shadow: none; font: inherit; font-weight: inherit; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .cb-edit { margin-top: 8px; font-size: 12.5px; }
+  .cb-edit > summary { list-style: none; display: inline; font-size: 12.5px; }
+  .cb-edit > summary::-webkit-details-marker { display: none; }
+  .cb-edit-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 8px; }
+  .cb-edit-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-soft); }
+  .cb-edit-form input { width: 110px; }
+  .cb-explain { overflow-x: auto; margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); font-size: 12.5px; line-height: 1.5; }
+  .cb-explain p { margin: 0 0 6px; }
+  .cb-explain p:last-child { margin-bottom: 0; }
+  .cb-calc { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .cb-explain-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .cb-explain-table th, .cb-explain-table td { padding: 3px 4px; text-align: right; white-space: nowrap; }
+  .cb-explain-table th:first-child, .cb-explain-table td:first-child { text-align: left; }
   .cb-chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
   .cb-chip-ok { background: var(--success-soft); color: var(--success); }
   .cb-chip-pendiente { background: var(--surface-alt); color: var(--text-soft); border: 1px solid var(--border); }

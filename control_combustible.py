@@ -150,6 +150,23 @@ def build_control(year, month):
     # El margen del mes contra la última compra pesa cada día por sus galones.
     weighted = [(d["margin_last"], d["sold"]) for d in days if d["margin_last"] is not None and d["sold"]]
     margin_last_month = _ratio(sum(m * g for m, g in weighted), sum(g for _, g in weighted))
+    # Para explicar el margen con última compra (pedido del usuario,
+    # 2026-11-03): qué factura se usó de costo y en cuántos días.
+    last_costs = []
+    for d in days:
+        if d["last_cost"] is None or not d["sold"]:
+            continue
+        if last_costs and last_costs[-1]["number"] == d["last_number"]:
+            entry = last_costs[-1]
+        else:
+            entry = {"number": d["last_number"], "cost": d["last_cost"], "from": d["date"], "sold": 0.0, "sales": 0.0}
+            last_costs.append(entry)
+        entry["to"] = d["date"]
+        entry["sold"] += d["sold"]
+        entry["sales"] += d["fuel_sales"] or 0.0
+    for entry in last_costs:
+        entry["price"] = _ratio(entry["sales"], entry["sold"])
+        entry["margin"] = entry["price"] - entry["cost"] if entry["price"] is not None else None
 
     reading = None
     if report["real_gallons"] is not None:
@@ -180,7 +197,12 @@ def build_control(year, month):
         "initial_source": report["initial_source"],
         "received_gallons": report["invoices_gallons"],
         "received_amount": report["invoices_amount"],
+        "received_count": len(invoices),
+        "total_gallons": report["total_gallons"],
+        "total_amount": report["total_amount"],
         "sold_gallons": round(sold_total, 2),
+        "fuel_sales": round(sales_total, 2),
+        "last_costs": last_costs,
         "final_stock": days[-1]["stock"] if days else round(report["initial_gallons"] or 0.0, 2),
         "last_loaded": last_loaded,
         "ppp": ppp,
