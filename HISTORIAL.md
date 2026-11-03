@@ -2780,3 +2780,37 @@ Texto completo, sin cambios, de la sección "Estado actual" de `CLAUDE.md` hasta
   - Se cargó Pagos5 (Kia) del 01/09: 8 recibos, 2170-2177, $7,241.89, que el manager no había mandado (lo encontró el chat "Skill Trabajo 14").
   - El importador de Cierre lee los dos cuadros. Con los 20 Cierre de 01-25 a 08-26 da igual que antes.
   - En la skill `ratio-facturas`: `pago_cupones_xml.py` manda cada pago al cuadro de su empresa y `controles.md` §2 tiene el formato nuevo.
+
+## 2026-11-02 a 03: chat Bradenton4 (Proyecciones: utilidad neta; Cierres de vuelta al formato anterior)
+
+- **Push**: a dev hasta `9cc2494`. `60355d2` (estado) y este cierre, sin pushear.
+- **Proyecciones** (`d969219`, `37895f9`, `9cc2494`):
+  - El cuadro principal es la **utilidad neta proyectada** y abre `/proyecciones/utilidad-neta` (`proyecciones_neta.py`, `templates/proyecciones_neta.html`). Tiene los renglones del Estado de Resultado del Bce, cada uno con lo de hasta hoy, lo proyectado y, si el mes tiene Bce, lo real:
+    - Utilidad bruta: combustible (venta − galones × PPP, más el rebate de Chase), C-Store por rubro al % teórico más los rebates, comisiones de Lottery, otros ingresos de Chase (hielo, Food Truck, Vaccumms) y, restando, los fees de tarjeta de los Cupones por fecha de venta.
+    - Gastos: Chase por categoría (sueldos, bancarios, luz, agua, seguro, reparaciones, Adm Fees, Internet/Alarma/Teléfono/Elistar más los gastos de Caja, movilidad) y lo de Chase sin categoría aparte.
+    - Proyección: las facturas de una vez por mes (`MONTHLY`) son lo real si ya se pagaron y, si no, lo del mes anterior; el Food Truck (`FIXED`) es lo del mes anterior hasta que entra todo; lo demás va al ritmo de los días cargados de Chase (Caja, al ritmo de los Close Store; fees, al de los Cupones).
+    - Agosto 2026: la app proyecta $13.300 de neta y el Bce dice $13.057. Bruta $39.024 contra $43.454 (los % teóricos del C-Store dan ~$4.000 menos que el margen real del 31,6 %). Gastos $25.724 contra $30.398 (Chase es lo pagado; el Bce, lo devengado: sueldos $12.288 contra $16.738, expensas $3.447 que no están en Chase, PetroServ $3.115 sin categoría en Chase).
+  - **Lottery**: la utilidad es la comisión real (On-Line + Skoff) de las semanas que se pagan a Chase en el mes (`proyecciones.lottery_commissions`, con `lottery_db.blocks_paid_in_month`), proyectada al ritmo de los días con comisión. Es la misma regla del Excel de Lottery y de la cuenta 4.10 del Bce (verificado jun-sep 2026). Del 27/07 al 11/10 la comisión fue el 5,97 % de lo vendido (por semana, de 3 % a 7 %: la de Skoff se cobra sobre los libros liquidados). El LOTTO del POS y la venta de Lottery dan lo mismo.
+  - **El Excel de Lottery de septiembre** suma las comisiones de las semanas del 31/08 al 27/09: la del 24 al 30/08 (pagada el 02/09, $853,92) no está ni en agosto ni en septiembre.
+  - La torta muestra el combustible solo y el C-Store por rubro (Tabacco, Soda, Beer/Wine, Resto, Lottery), con su % del total o del C-Store, en columnas fijas con barras. Kia/Toyota no entra (es combustible a cuenta; antes figuraba al 100 %). Al tocar el C-Store se baja al cuadro por rubro (`#proy-cstore`).
+  - Se sacaron el gráfico del mes día por día y los de mes a mes (por galón, galones, ventas). Por un rato la historia salió de la app (`app_month_totals`); al sacar los gráficos se sacó también ese código.
+  - `read_balance_workbook` guarda también el ESTADO RESULTADO (ganancia bruta, cada gasto, resultado neto) y de la Nota 1 las comisiones de Lottery, hielo, Food Truck, Vaccumm, otros ingresos y gastos de tarjeta. Hay que volver a subir el Bce para tenerlos.
+  - **Por qué la utilidad neta de octubre sale tan alta** (dev mostró $38.110): el PPP. Septiembre tiene en Físico el inicial de prueba (20.000 gal / $42.000 = $2,10/gal), que pasa por el final teórico al inicial de octubre: PPP 3,5237 en vez de 3,9040. En la PC: neta $29.742; con el inicial bueno, $14.205.
+- **Cierres de vuelta al formato anterior** (3/11, se lo pidieron a Alfonso): en Cierre 09-26 y 10-26 del Drive, PAGO Cupones, Pendiente Gettel-Toyota y la Pendiente del mes anterior volvieron a las del respaldo del 29/10. Se reemplazaron con Excel por COM: se copian las hojas del respaldo y `ChangeLink` devuelve los vínculos al mismo libro. Por COM, el primer `Delete`/`SaveAs` a veces falla y el segundo anda; `LinkSources` devuelve un arreglo que empieza en 1 y `if ($links)` falla con él.
+  - Las demás hojas quedaron como estaban, verificado celda por celda.
+  - En septiembre se agregó el Kia del 01/09 (2170-2177, $7,241.89) como pago N° 2; COBRADO $28.494,94.
+  - El importador de la app da los mismos pagos por empresa con los dos formatos.
+  - Respaldos: `Cierre 0X-26 2026-11-03 antes de volver Gettel al formato anterior.xlsx`.
+  - Skill `ratio-facturas`: `controles.md` §2 describe otra vez el cuadro único (§2b marcada fuera de uso) y `ESTADO.md` avisa. `pago_cupones_xml.py` ya detectaba el formato.
+  - Quedó abierto: F4 y F7 del PAGO de octubre apuntan a celdas vacías (E39 → E40 de Gettel-Toyota, E22 → E27 de Pendiente 09.2026). Por qué el formato viejo muestra mucho más pendiente: la lista de días pendientes es un corte por fecha y la de septiembre se armó sin el pago Kia del 01/09. La cuenta de la app da neto ~$28 al 30/09. Alfonso vio unos $11.024 y no se encontró de dónde salen.
+
+## 2026-11-03: chat Bradenton5 (Control de Tarjetas para la conciliación; botonera)
+
+- Alfonso descartó lo que quedó abierto de Bradenton4 (fórmulas del PAGO de octubre, los ~$11.024, el inicial de Físico, el Lottery de septiembre). Las cuentas de Leti y Cande ya están en producción. El manual lo actualiza él.
+- **Control de Tarjetas** (`/controles/tarjetas`, pedido de Leti: "controles que la ayuden a componer las cuentas para armar su conciliación"):
+  - Se sacaron todos los cuadros de aviso (verde/rojo), la alerta de $15.000 con "En camino" y "Atrasado" (lo vendido que J.H. todavía tenía tiempo de depositar) y la segunda tabla día por día ("Por día de venta").
+  - Arriba, dos pendientes al cierre, cada uno con el monto subrayado que despliega sus DDC (`webapp._ddc_pending`, sobre `eft_db.cupones_month_view`):
+    - **Pendiente de acreditar**: lo vendido con tarjeta que todavía no era DDC (el pendiente de `control_tarjetas`), con los DDC del mes siguiente que lo trajeron. Septiembre: $22.807,86 = DDC-5625 (01/10, $18.829,52, ventas del 28 y 29/09) + DDC-5632 (02/10, $4.118,92, del 30/09); $140,58 de diferencia por batches que cruzan de día o no son del POS. Es lo que le coincide a Leti con la contabilidad. El DDC chico que viene aparte en el mismo depósito (DDC-5655 $59,43, DDC-5667 $51,56: batches "slri" del día del depósito) no se lista.
+    - **DDC sin aplicar en un EFT**: los DDC que ningún EFT pagó hasta fin de mes, con el EFT que los aplicó después. Septiembre: 5 DDC, $6.189,28 neto, lo mismo que el Excel de DDC.
+  - Los reportes de J.H. quedaron con los totales en una línea (rojo solo si algo no coincide) y las tablas de EFT y Facturas abiertas.
+- **Botonera**: Tarjetas muestra los mismos dos pendientes con sus DDC; "Portales" pasó a llamarse **Servicios** (la clave interna sigue siendo `portales`).
