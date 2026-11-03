@@ -33,7 +33,7 @@ Solo lo vigente. El Estado actual largo de los chats 19 a 34 (con todos los pend
   - **PPP en producción**: en Físico, septiembre tiene un inicial de prueba (20.000 gal / $42.000) y agosto arranca en 0. Con el inicial del Excel (9.682,52 gal / $34.985,66) da 3,8881, como el Excel. Lo corrige Alfonso en Físico de producción.
   - **Bce en producción**: para la historia mes a mes de Proyecciones, un admin sube una vez `Bce Brandenton 30-09-26.xlsx` en "Control contra el Balance".
   - Físico todavía compara la medición contra el fin de mes (ajuste chico ofrecido).
-- **Hoja PAGO del Cierre separada por empresa** (29/10): Toyota en A-G y Kia en I-O, con saldo encadenado. Hecho en Cierre 09-26 y 10-26 del Drive; el formato está en la skill `ratio-facturas`, `controles.md` §2. Para noviembre, F7/N7 llevan el saldo al 31/10 de cada empresa.
+- **Hoja PAGO del Cierre: de vuelta al cuadro único** (3/11, se lo pidieron a Alfonso). En Cierre 09-26 y 10-26 volvieron las 3 hojas de Gettel de antes del 29/10; el resto quedó igual. El importador de la app lee los dos formatos. Respaldos del formato separado en `Claude outputs/respaldos/` ("2026-11-03 antes de volver Gettel").
 - **Septiembre (revisado el 26/10 con los datos al 22/10)**: completo salvo el recibo del depósito de $2,550 (25/09), 8 movimientos de Chase sin categoría, Flori-Gas 1734258 (24/09, ni en Caja ni en Proveedores), Colonial 2104446 y 2109869, King's 212214, Brandon Liu 335 y Sale Tax sin marcar.
 - **Pendientes principales.** Antes de hacer cualquiera, confirmar que sigue abierto (la lista completa por chat está en el archivo de HISTORIAL).
   - **Cargar cuando el usuario confirme:**
