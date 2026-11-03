@@ -38,10 +38,16 @@
   .tc-jh summary { font-size: 13px; }
   .tc-jh .tc-table { min-width: 680px; }
   .tc-jh .tc-table td.tc-left, .tc-jh .tc-table th.tc-left { text-align: left; }
-  .tc-wrap { white-space: normal !important; min-width: 160px; }
   .tc-diff { color: #B91C1C; font-weight: 700; }
-  .tc-pending { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
-  .tc-pending-line { font-size: 15px; font-weight: 700; }
+  .tc-pending { margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .tc-tile { padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-alt); }
+  .tc-tile-label { font-size: 12.5px; font-weight: 600; color: var(--text-soft); }
+  .tc-tile-amount { margin-top: 4px; font-size: 22px; }
+  .tc-tile-sub { margin-top: 2px; font-size: 12.5px; color: var(--text-soft); }
+  .tc-days { table-layout: fixed; min-width: 640px; }
+  .tc-days col.tc-col-date { width: 16%; }
+  .tc-days th, .tc-days td { padding: 10px 20px; vertical-align: top; white-space: normal; }
+  .tc-days th:last-child, .tc-days td:last-child { text-align: right; }
   .tc-pop { width: 620px; max-width: calc(100vw - 16px); max-height: 70vh; overflow: auto; padding: 12px 14px; }
   .tc-pop-title { font-weight: 700; font-size: 13.5px; color: var(--accent); margin-bottom: 4px; }
   .tc-pop .tc-table-wrap { margin-top: 8px; }
@@ -50,7 +56,6 @@
   .tc-pop .tc-table td.tc-left, .tc-pop .tc-table th.tc-left { text-align: left; }
   button.tc-link { background: none; border: 0; padding: 0; margin: 0; box-shadow: none; font: inherit; font-weight: 700; }
   .tc-link { text-decoration: underline; text-underline-offset: 3px; color: var(--accent); font-variant-numeric: tabular-nums; }
-  .tc-sub-inline { font-size: 12.5px; font-weight: 400; color: var(--text-soft); margin-left: 6px; }
   .tc-totals { margin-top: 10px; }
 </style>
 {% endblock %}
@@ -84,8 +89,10 @@
   {% set last = control.last %}
   <div class="tc-pending">
     {% if last %}
-    <div class="tc-pending-ddc">
-      <div class="tc-pending-line">Pendiente de acreditar al {{ ddmm(last.date) }}: <button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-sales">{{ money(last.pending) }}</button> <span class="tc-sub-inline">vendido con tarjeta que todavía no era DDC</span></div>
+    <div class="tc-tile">
+      <div class="tc-tile-label">Pendiente de acreditar al {{ ddmm(last.date) }}</div>
+      <div class="tc-tile-amount"><button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-sales">{{ money(last.pending) }}</button></div>
+      <div class="tc-tile-sub">Vendido con tarjeta que todavía no era DDC</div>
       <div class="popover-panel tc-pop" id="tc-pop-sales">
       <div class="tc-pop-title">DDC que trajeron lo vendido hasta el {{ ddmm(last.date) }}</div>
       {% if next_month_ddc %}
@@ -116,8 +123,10 @@
       </div>
     </div>
     {% endif %}
-    <div class="tc-pending-ddc">
-      <div class="tc-pending-line">DDC sin aplicar en un EFT al {{ pending_until.strftime('%d/%m') }}: <button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-ddc">{{ money(pending_ddc_totals.net) }}</button>{% if pending_ddc %} <span class="tc-sub-inline">{{ pending_ddc|length }} DDC, Gross {{ money(pending_ddc_totals.gross) }}</span>{% endif %}</div>
+    <div class="tc-tile">
+      <div class="tc-tile-label">DDC sin aplicar en un EFT al {{ pending_until.strftime('%d/%m') }}</div>
+      <div class="tc-tile-amount"><button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-ddc">{{ money(pending_ddc_totals.net) }}</button></div>
+      <div class="tc-tile-sub">{% if pending_ddc %}{{ pending_ddc|length }} DDC, Gross {{ money(pending_ddc_totals.gross) }}{% else %}Ninguno{% endif %}</div>
       <div class="popover-panel tc-pop" id="tc-pop-ddc">
       <div class="tc-pop-title">DDC sin aplicar en un EFT al {{ pending_until.strftime('%d/%m') }}</div>
       {% if pending_ddc %}
@@ -154,7 +163,8 @@
 
   {% if control.rows %}
   <div class="tc-table-wrap">
-    <table class="tc-table">
+    <table class="tc-table tc-days">
+      <colgroup><col class="tc-col-date"><col><col><col></colgroup>
       <thead>
         <tr><th>Fecha</th><th>Vendido con tarjeta</th><th>Cupones del día</th><th>Vendido sin DDC todavía</th></tr>
       </thead>
@@ -261,58 +271,6 @@
             </tr>
             {% endfor %}
           </tbody>
-        </table>
-      </div>
-    </details>
-    {% endif %}
-
-    {# ---------------- Cupones ---------------- #}
-    <h3>Cupones del mes</h3>
-    {% set cp = jh.coupons %}
-    {% if not cp %}
-    {% if month_end_warnings_due(year, month) %}<div class="tc-control none"><div class="tc-control-title" style="margin:0;">Sin {{ jh_labels['coupons'] }} de {{ month_name }} {{ year }}.</div></div>{% endif %}
-    {% else %}
-    <div class="tc-control-grid tc-totals">
-      <span>Del mes: <strong>{{ cp.ddc_count }} DDC, {{ smoney(cp.totals.net) }}</strong> neto</span>
-      <span>Aplicados en EFT de {{ month_name|lower }}: <strong>{{ cp.applied_in_month.count }}, {{ smoney(cp.applied_in_month.amount) }}</strong></span>
-      <span>Pasan al mes siguiente: <strong>{{ cp.carried.count }}, {{ smoney(cp.carried.amount) }}</strong></span>
-      <span>Del mes anterior, pagados en {{ month_name|lower }}: <strong>{{ smoney(cp.from_prev_month) }}</strong></span>
-    </div>
-    {% if cp.bad %}<p class="tc-note tc-diff">No coincide{{ 'n' if cp.bad|length != 1 }}: {% for r in cp.bad %}{{ ddmm(r.date) }}{{ ', ' if not loop.last else '.' }}{% endfor %}</p>{% endif %}
-    <details {{ 'open' if cp.bad }}>
-      <summary>Ver los cupones por día</summary>
-      <div class="tc-table-wrap">
-        <table class="tc-table">
-          <thead><tr><th class="tc-left">Fecha</th><th class="tc-left">DDC</th><th class="tc-left">Ventas</th><th>Reporte J.H. (Gross)</th><th>Cupones cargados</th><th>Aplicado en EFT</th><th class="tc-left">Estado</th></tr></thead>
-          <tbody>
-            {% for r in cp.rows %}
-            <tr>
-              <td class="tc-left">{{ ddmm(r.date) }}</td>
-              <td class="tc-left tc-wrap">{{ r.coupons|join(', ') }}{% if r.missing_coupons %}<span class="tc-sub tc-diff">Faltan en Cupones: {{ r.missing_coupons|join(', ') }}</span>{% endif %}{% if r.extra_coupons %}<span class="tc-sub tc-diff">En Cupones y no en el reporte: {{ r.extra_coupons|join(', ') }}</span>{% endif %}</td>
-              <td class="tc-left">{% if r.sale_from %}{{ ddmm(r.sale_from) }}{% if r.sale_to != r.sale_from %} al {{ ddmm(r.sale_to) }}{% endif %}{% else %}—{% endif %}</td>
-              <td>{{ smoney(r.gross) }}<span class="tc-sub">neto {{ smoney(r.net) }}</span></td>
-              <td>{{ smoney(r.loaded_gross) }}<span class="tc-sub">{% if r.loaded_unknown %}{{ r.loaded_unknown }} DDC sin monto propio hasta su EFT{% else %}neto {{ smoney(r.loaded_net) }}{% endif %}</span></td>
-              <td>{{ smoney(r.applied_gross) if r.efts else '—' }}{% if r.efts %}<span class="tc-sub">{% for x in r.efts %}{{ x.rcv }} ({{ ddmm(x.date) }}){{ ', ' if not loop.last }}{% endfor %}</span>{% endif %}</td>
-              <td class="tc-left">
-                {% if r.status == 'ok' %}<span class="tc-badge tc-badge-ok">OK</span>
-                {% elif r.status == 'pending' %}<span class="tc-badge tc-badge-off">Sin aplicar todavía</span>
-                {% elif r.status == 'late' %}<span class="tc-badge tc-badge-alert">Sin aplicar</span>
-                {% elif r.status == 'applied_diff' %}<span class="tc-badge tc-badge-alert">EFT aplicó distinto</span>
-                {% elif r.status == 'not_loaded' %}<span class="tc-badge tc-badge-alert">Sin cargar en Cupones</span>
-                {% else %}<span class="tc-badge tc-badge-alert">No coincide</span>{% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td class="tc-left" colspan="3">Total del mes</td>
-              <td>{{ smoney(cp.totals.gross) }}<span class="tc-sub">neto {{ smoney(cp.totals.net) }}</span></td>
-              <td>{{ smoney(cp.rows|sum(attribute='loaded_gross')) }}</td>
-              <td>{{ smoney(cp.rows|selectattr('efts')|sum(attribute='applied_gross')) }}</td>
-              <td class="tc-left">{% if cp.open.days %}Sin aplicar: {{ smoney(cp.open.net) }} neto<span class="tc-sub">{{ smoney(cp.open.gross) }} Gross, {{ cp.open.days }} día{{ 's' if cp.open.days != 1 }}</span>{% else %}Todo aplicado{% endif %}</td>
-            </tr>
-          </tfoot>
         </table>
       </div>
     </details>
