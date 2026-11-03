@@ -2824,3 +2824,4 @@ Texto completo, sin cambios, de la sección "Estado actual" de `CLAUDE.md` hasta
   - Galones muestra el valor del stock teórico al PPP (`final_value`).
   - Salieron el cuadro "Facturas contra EFT" y la tabla de facturas contra los EFT (y su cálculo, `_invoices_vs_eft`).
   - Físico salió de la barra lateral; la página sigue y se abre desde Carga de Datos → Combustible.
+- **Cuadros flotantes y Físico más prolijo**: el desglose de un número (precios por galón y editar el inicial en Combustible; los dos pendientes de Tarjetas) se abre con el popover genérico de `base.html` (`.popover-trigger`/`.popover-panel`), que flota sin mover la página. El cuadro Físico tiene secciones ("Compras del mes", "Cierre del mes"), el concepto primero, Final Teórico resaltado, Ventas en rojo, el % de la diferencia en una etiqueta y el PPP del mes arriba. Los "Ver …" de los reportes de J.H. siguen como `<details>`.
