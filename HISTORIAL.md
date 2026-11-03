@@ -2818,3 +2818,9 @@ Texto completo, sin cambios, de la sección "Estado actual" de `CLAUDE.md` hasta
   - El inventario inicial (galones y monto) se edita desde el cuadro "Galones" con el mismo guardado de Físico (`/fisico/inicial` con `return_to=combustible`, que vuelve al control). Se muestra también el monto del inicial.
   - El precio de venta, el PPP y el margen con última compra se tocan y explican su cuenta con los números del mes (`control_combustible`: `fuel_sales`, `total_gallons`/`total_amount`, `last_costs` con la factura usada de costo por tramo de días). Septiembre en la PC: $175.365,42 ÷ 41.541,65 gal = $4,2214; ($42.000 + $170.648,58) ÷ 63.206 gal = $3,3644 (con el inicial de prueba).
   - Se sacó el cuadro día por día (el cálculo sigue, lo usan los cuadros de arriba).
+- **Control de combustible, segunda vuelta** (pedido de Leti, "muy parecido a la hoja de Excel"):
+  - El cuadro de abajo es la hoja Fisico del Cierre (`control_combustible.build_control` devuelve `sheet` = `fisico.build_month_report`): Inventario Inicial Teórico, las facturas del mes ("Invoice No: …", fecha y vencimiento), Total Compras con el PPP, Ventas (en rojo, galones × PPP como `=+D12*F10`), Inventario Final Teórico, Inventario Final Real (la medición, valuada al PPP) y Diferencia. Con el inicial del Excel de septiembre (9.682,52 gal / $34.985,66) la cuenta da 3,8881, como la hoja.
+  - La diferencia es teórico − real en el cuadro y en la Medición (antes la Medición mostraba real − teórico).
+  - Galones muestra el valor del stock teórico al PPP (`final_value`).
+  - Salieron el cuadro "Facturas contra EFT" y la tabla de facturas contra los EFT (y su cálculo, `_invoices_vs_eft`).
+  - Físico salió de la barra lateral; la página sigue y se abre desde Carga de Datos → Combustible.
