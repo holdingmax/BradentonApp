@@ -13,7 +13,7 @@
 {% macro dmy(d) %}{{ d.strftime('%d/%m') if d else '—' }}{% endmacro %}
 {% set c = control %}
 {% set r = c.reading %}
-{% set sources = {"manual": "cargado a mano en Físico", "prev_month_computed": "el final teórico del mes anterior", "default": "no hay inventario inicial"} %}
+{% set sources = {"prev_month_computed": "el final teórico del mes anterior", "default": "no hay inventario inicial"} %}
 
 <div class="page-header">
   <span class="eyebrow">Controles</span>
@@ -39,23 +39,24 @@
 
 <div class="cb-grid">
   <div class="cb-tile">
-    <div class="cb-tile-label">Galones</div>
-    <div class="cb-lines">
-      <span>Inventario inicial</span><strong class="{{ 'cb-bad' if c.initial_source == 'default' }}">{{ gal(c.initial_gallons) }}</strong>
-      <span>+ Recibido de J.H.</span><strong>{{ gal(c.received_gallons) }}</strong>
-      <span>− Vendido</span><strong>{{ gal(c.sold_gallons) }}</strong>
-      <span class="cb-total">= Inventario final teórico{% if c.last_loaded %} al {{ dmy(c.last_loaded) }}{% endif %}</span><strong class="cb-total {{ 'cb-bad' if c.final_stock < 0 }}">{{ gal(c.final_stock) }}</strong>
+    {% macro at_ppp(g) %}{{ money(g * c.ppp) if g is not none and c.ppp is not none else '—' }}{% endmacro %}
+    <div class="cb-lines cb-lines-3">
+      <span></span><em>Galones</em><em>$</em>
+      <span>Inventario inicial</span><strong class="{{ 'cb-bad' if c.initial_source == 'default' }}">{{ gal(c.initial_gallons) }}</strong><strong>{{ money(c.initial_amount) }}</strong>
+      <span>+ Recibido de J.H.</span><strong>{{ gal(c.received_gallons) }}</strong><strong>{{ money(c.received_amount) }}</strong>
+      <span>− Vendido <span class="cb-note">al PPP</span></span><strong>{{ gal(c.sold_gallons) }}</strong><strong>{{ at_ppp(c.sold_gallons) }}</strong>
+      <span class="cb-total">= Inventario final teórico{% if c.last_loaded %} al {{ dmy(c.last_loaded) }}{% endif %}</span><strong class="cb-total {{ 'cb-bad' if c.final_stock < 0 }}">{{ gal(c.final_stock) }}</strong><strong class="cb-total">{{ at_ppp(c.final_stock) }}</strong>
       {% if r %}
-      <span>Inventario final real{% if r.date %} <span class="cb-note">medido el {{ dmy(r.date) }}</span>{% endif %}</span><strong>{{ tanks_tip(r.gallons, r.regular, r.premium) }}</strong>
+      <span>Inventario final real{% if r.date %} <span class="cb-note">medido el {{ dmy(r.date) }}</span>{% endif %}</span><strong>{{ tanks_tip(r.gallons, r.regular, r.premium) }}</strong><strong>{{ at_ppp(r.gallons) }}</strong>
       {% set off = r.diff_pct is not none and r.diff_pct|abs > 0.01 %}
-      <span class="cb-total">Diferencia <span class="cb-note">teórico − real</span></span><strong class="cb-total {{ 'cb-bad' if off }}">{{ gal(r.diff) }} <span class="cb-pct {{ 'cb-pct-bad' if off else 'cb-pct-ok' }}">{{ pct(r.diff_pct) }}</span></strong>
+      <span class="cb-total">Diferencia <span class="cb-note">teórico − real</span> <span class="cb-pct {{ 'cb-pct-bad' if off else 'cb-pct-ok' }}">{{ pct(r.diff_pct) }}</span></span><strong class="cb-total {{ 'cb-bad' if off }}">{{ gal(r.diff) }}</strong><strong class="cb-total {{ 'cb-bad' if off }}">{{ at_ppp(r.diff) }}</strong>
       {% else %}
-      <span>Inventario final real</span><strong class="cb-soft">Sin cargar</strong>
+      <span>Inventario final real</span><strong class="cb-soft">Sin cargar</strong><strong></strong>
       {% endif %}
     </div>
     {% if r and r.cut != c.last_loaded %}<p class="cb-foot">La diferencia es contra el teórico al {{ dmy(r.cut) }} ({{ gal(r.theoretical) }} gal).</p>{% endif %}
     {% if r and r.incomplete %}<p class="cb-foot cb-warn">Faltan Close Store hasta el {{ dmy(r.cut) }}: el teórico todavía no está completo.</p>{% endif %}
-    <p class="cb-foot">Inicial: {{ gal(c.initial_gallons) }} gal por {{ money(c.initial_amount) }}, {{ sources.get(c.initial_source, c.initial_source) }}.</p>
+    {% if c.initial_source == 'default' %}<p class="cb-foot cb-warn">No hay inventario inicial: cargalo en Editar inventario inicial.</p>{% endif %}
     {# Editar el inicial sin ir a Físico (pedido del usuario, 2026-11-03): el mismo guardado de Físico, que vuelve acá; en un cuadro flotante para no mover la página. #}
     <div class="cb-edit-links">
       <button type="button" class="popover-trigger cb-link cb-edit-link" data-popover-target="cb-pop-initial">Editar inventario inicial</button>
@@ -151,7 +152,7 @@
       <tbody>
         <tr class="cb-sheet-section"><th>Compras del mes</th><th>Fecha</th><th>Vence</th><th>Galones</th><th>Importe</th><th>Precio por galón</th></tr>
         <tr>
-          <td>Inventario Inicial Teórico <span class="cb-note">{{ sources.get(s.initial_source, s.initial_source) }}</span></td>
+          <td>Inventario Inicial Teórico{% if sources.get(s.initial_source) %} <span class="cb-note">{{ sources[s.initial_source] }}</span>{% endif %}</td>
           <td></td><td></td>
           <td>{{ gal(s.initial_gallons) }}</td><td>{{ money(s.initial_amount) }}</td>
           <td class="cb-soft">{{ money(s.initial_amount / s.initial_gallons) if s.initial_gallons else '—' }}</td>
@@ -316,6 +317,8 @@
   .cb-tile-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--accent); margin-bottom: 10px; }
   .cb-lines { display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; font-size: 13.5px; }
   .cb-lines strong { text-align: right; }
+  .cb-lines-3 { grid-template-columns: 1fr auto auto; column-gap: 22px; }
+  .cb-lines-3 em { font-style: normal; font-size: 12px; font-weight: 600; color: var(--text-soft); text-align: right; }
   .cb-total { padding-top: 9px; border-top: 1px solid var(--border); font-weight: 700; }
   .cb-sub { display: block; font-size: 11.5px; color: var(--text-soft); text-align: right; }
   .cb-foot { font-size: 12px; color: var(--text-soft); margin: 10px 0 0; line-height: 1.45; }
