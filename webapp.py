@@ -2176,14 +2176,24 @@ def fisico_lectura_real():
     year = request.form.get("year", type=int)
     month = request.form.get("month", type=int)
     gallons_raw = (request.form.get("real_gallons") or "").strip()
+    regular_raw = (request.form.get("real_regular") or "").strip()
+    premium_raw = (request.form.get("real_premium") or "").strip()
     reading_date = (request.form.get("real_reading_date") or "").strip() or None
 
     try:
-        gallons_value = float(gallons_raw) if gallons_raw else None
-        fisico_db.set_month_real_ending(year, month, gallons_value, reading_date)
+        # Desde Combustible se carga por tanque y el total es la suma (pedido del usuario, 2026-11-05).
+        if regular_raw or premium_raw:
+            if not (regular_raw and premium_raw):
+                raise ValueError("faltan los dos tanques")
+            regular, premium = float(regular_raw), float(premium_raw)
+            gallons_value = round(regular + premium, 2)
+        else:
+            regular = premium = None
+            gallons_value = float(gallons_raw) if gallons_raw else None
+        fisico_db.set_month_real_ending(year, month, gallons_value, reading_date, regular, premium)
         flash("Inventario final real guardado.", "success")
     except ValueError:
-        flash("No se pudo guardar: los galones tienen que ser un número válido.", "error")
+        flash("No se pudo guardar: cargá Regular y Premium, los dos con números válidos.", "error")
 
     # También se carga desde Controles → Combustible (pedido del usuario, 2026-11-05).
     back_endpoint = "controles_combustible" if request.form.get("return_to") == "combustible" else "fisico_view"
@@ -2236,7 +2246,8 @@ def _fisico_take_reading(year, month, readings):
     when = reading["date"]
     detail = f"{reading['gallons']:,.0f} gal (Regular {reading['tanks'][1]:,.0f} + Premium {reading['tanks'][2]:,.0f})"
     previous = (fisico_db.get_month_settings(year, month) or {}).get("real_ending_gallons")
-    fisico_db.set_month_real_ending(year, month, float(reading["gallons"]), when.date() if when else None)
+    fisico_db.set_month_real_ending(year, month, float(reading["gallons"]), when.date() if when else None,
+                                    float(reading["tanks"][1]), float(reading["tanks"][2]))
     text = f"Inventario final real tomado de la foto: {detail}" + (f", medido el {when:%d/%m}." if when else ".")
     if previous is not None and abs(previous - reading["gallons"]) >= 0.5:
         text += f" Antes estaba cargado {previous:,.2f} gal."

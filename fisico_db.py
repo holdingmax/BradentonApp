@@ -113,6 +113,8 @@ def _ensure_schema(conn):
         )
         """
     )
+    # El inventario real por tanque (pedido del usuario, 2026-11-05): se ve qué suma cada uno.
+    _ensure_columns(conn, "fisico_months", {"real_regular_gallons": "REAL", "real_premium_gallons": "REAL"})
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS fisico_photos (
@@ -366,21 +368,30 @@ def set_month_initial_override(year, month, gallons, amount):
         conn.close()
 
 
-def set_month_real_ending(year, month, gallons, reading_date=None):
-    """gallons en None borra la lectura -- el mes vuelve a quedar "pendiente de lectura física"."""
+def set_month_real_ending(year, month, gallons, reading_date=None, regular=None, premium=None):
+    """
+    gallons en None borra la lectura -- el mes vuelve a quedar "pendiente de
+    lectura física". regular/premium son los dos tanques del ticket, para ver
+    qué suma cada uno; quedan en None si se cargó solo el total.
+    """
+    if gallons is None:
+        regular = premium = None
     now = _now()
     conn = _connect()
     try:
         conn.execute(
             """
-            INSERT INTO fisico_months (year, month, real_ending_gallons, real_reading_date, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO fisico_months (year, month, real_ending_gallons, real_reading_date,
+                                       real_regular_gallons, real_premium_gallons, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(year, month) DO UPDATE SET
                 real_ending_gallons = excluded.real_ending_gallons,
                 real_reading_date = excluded.real_reading_date,
+                real_regular_gallons = excluded.real_regular_gallons,
+                real_premium_gallons = excluded.real_premium_gallons,
                 updated_at = excluded.updated_at
             """,
-            (year, month, gallons, _date_key(reading_date), now),
+            (year, month, gallons, _date_key(reading_date), regular, premium, now),
         )
         conn.commit()
     finally:

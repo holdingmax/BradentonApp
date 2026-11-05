@@ -145,6 +145,8 @@ def build_month_report(year, month, _depth=0):
         "final_teorico_amount": final_teorico_amount,
         "real_gallons": real_gallons,
         "real_reading_date": real_reading_date,
+        "real_regular_gallons": settings.get("real_regular_gallons") if settings else None,
+        "real_premium_gallons": settings.get("real_premium_gallons") if settings else None,
         "diferencia_gallons": diferencia_gallons,
         "diferencia_amount": diferencia_amount,
         "diferencia_pct": diferencia_pct,

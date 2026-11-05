@@ -122,6 +122,8 @@ def build_control(year, month):
             "date": reading_date,
             "cut": cut,
             "gallons": report["real_gallons"],
+            "regular": report.get("real_regular_gallons"),
+            "premium": report.get("real_premium_gallons"),
             "theoretical": theoretical,
             "diff": diff,
             "diff_pct": _ratio(diff, theoretical),

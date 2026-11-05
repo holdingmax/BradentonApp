@@ -1,13 +1,15 @@
 {% extends "base.html" %}
 {% block main_class %}main-full{% endblock %}
 {% block crumbs %}
-<nav class="crumbs"><a href="{{ url_for('controles') }}">Controles</a><span class="current">Combustible</span></nav>
+<nav class="crumbs"><span class="current">Combustible</span></nav>
 {% endblock %}
 {% block content %}
 {% from "_month_jump.html" import month_jump %}
 {% macro money(v, d=2) %}{% if v is none %}—{% elif v < 0 %}−${{ ("{:,.%df}" % d).format(-v) }}{% else %}${{ ("{:,.%df}" % d).format(v) }}{% endif %}{% endmacro %}
 {% macro gal(v) %}{% if v is none %}—{% elif v < 0 %}−{{ "{:,.2f}".format(-v) }}{% else %}{{ "{:,.2f}".format(v) }}{% endif %}{% endmacro %}
 {% macro pct(v) %}{% if v is none %}—{% else %}{{ '+' if v > 0 }}{{ "{:.1f}".format(v * 100) }} %{% endif %}{% endmacro %}
+{# Regular + Premium del inventario real, al pasar por encima o tocarlo (pedido del usuario, 2026-11-05). #}
+{% macro tanks_tip(total, regular, premium) %}{% if regular is not none and premium is not none %}<span class="cb-tip" tabindex="0">{{ gal(total) }}<span class="cb-tip-box" role="tooltip"><span>Regular</span><b>{{ gal(regular) }}</b><span>+ Premium</span><b>{{ gal(premium) }}</b><span class="cb-tip-total">= Total</span><b class="cb-tip-total">{{ gal(total) }}</b></span></span>{% else %}{{ gal(total) }}{% endif %}{% endmacro %}
 {% macro dmy(d) %}{{ d.strftime('%d/%m') if d else '—' }}{% endmacro %}
 {% set c = control %}
 {% set r = c.reading %}
@@ -44,7 +46,7 @@
       <span>− Vendido</span><strong>{{ gal(c.sold_gallons) }}</strong>
       <span class="cb-total">= Inventario final teórico{% if c.last_loaded %} al {{ dmy(c.last_loaded) }}{% endif %}</span><strong class="cb-total {{ 'cb-bad' if c.final_stock < 0 }}">{{ gal(c.final_stock) }}</strong>
       {% if r %}
-      <span>Inventario final real{% if r.date %} <span class="cb-note">medido el {{ dmy(r.date) }}</span>{% endif %}</span><strong>{{ gal(r.gallons) }}</strong>
+      <span>Inventario final real{% if r.date %} <span class="cb-note">medido el {{ dmy(r.date) }}</span>{% endif %}</span><strong>{{ tanks_tip(r.gallons, r.regular, r.premium) }}</strong>
       {% set off = r.diff_pct is not none and r.diff_pct|abs > 0.01 %}
       <span class="cb-total">Diferencia <span class="cb-note">teórico − real</span></span><strong class="cb-total {{ 'cb-bad' if off }}">{{ gal(r.diff) }} <span class="cb-pct {{ 'cb-pct-bad' if off else 'cb-pct-ok' }}">{{ pct(r.diff_pct) }}</span></strong>
       {% else %}
@@ -77,11 +79,13 @@
         <input type="hidden" name="year" value="{{ year }}">
         <input type="hidden" name="month" value="{{ month }}">
         <input type="hidden" name="return_to" value="combustible">
-        <label>Galones <input type="number" step="0.01" name="real_gallons" value="{{ r.gallons if r else '' }}"></label>
+        <label>Regular (T1) <input type="number" step="0.01" name="real_regular" value="{{ '{:g}'.format(r.regular) if r and r.regular is not none else '' }}"></label>
+        <label>Premium (T2) <input type="number" step="0.01" name="real_premium" value="{{ '{:g}'.format(r.premium) if r and r.premium is not none else '' }}"></label>
         <label>Medido el <input type="date" name="real_reading_date" value="{{ r.date.isoformat() if r and r.date else '' }}"></label>
         <button type="submit" class="btn-accent">Guardar</button>
       </form>
-      <p class="cb-foot">El volumen de los dos tanques del ticket del inventario. Vacío, se borra.</p>
+      <p class="cb-real-sum" data-real-sum>{% if r and r.regular is not none and r.premium is not none %}{{ gal(r.regular) }} + {{ gal(r.premium) }} = <strong>{{ gal(r.gallons) }}</strong> gal{% elif r %}Cargado {{ gal(r.gallons) }} gal, sin separar por tanque.{% endif %}</p>
+      <p class="cb-foot">El volumen (VOLUME) de cada tanque del ticket del inventario; el total es la suma. Los dos vacíos, se borra.</p>
     </div>
   </div>
 
@@ -184,7 +188,7 @@
           <td>Inventario Final Real{% if s.real_reading_date %} <span class="cb-note">medido el {{ idm(s.real_reading_date) }}</span>{% endif %}</td>
           <td></td><td></td>
           {% if s.real_gallons is not none %}
-          <td>{{ gal(s.real_gallons) }}</td><td>{{ money(s.real_gallons * c.ppp) if c.ppp is not none else '—' }}</td><td>{{ money(c.ppp) }}</td>
+          <td>{{ tanks_tip(s.real_gallons, s.real_regular_gallons, s.real_premium_gallons) }}</td><td>{{ money(s.real_gallons * c.ppp) if c.ppp is not none else '—' }}</td><td>{{ money(c.ppp) }}</td>
           {% else %}
           <td colspan="3" class="cb-soft">Sin cargar</td>
           {% endif %}
@@ -228,7 +232,7 @@
     <input type="file" name="fotos" accept="image/*,application/pdf" multiple required>
     <button type="submit" class="btn-accent">Subir fotos</button>
   </form>
-  <p class="cb-foot">Fotos o PDF del ticket "Inventory Report" de los tanques (sirve el Resumen de Ventas entero: queda solo la hoja del ticket). Se enderezan, cada reporte del ticket queda en su foto y el inventario final real se toma de la foto del cierre. Si está mal, se corrige en Editar inventario final real. Tocá una foto para verla grande.</p>
+  <p class="cb-foot">Fotos o PDF del ticket "Inventory Report" de los tanques. Tocá una foto para verla grande.</p>
 </div>
 </div>
 
@@ -324,5 +328,29 @@
   .cb-chip-ok { background: var(--success-soft); color: var(--success); }
   .cb-chip-pendiente { background: var(--surface-alt); color: var(--text-soft); border: 1px solid var(--border); }
   .cb-chip-diferencia, .cb-chip-vencida { background: var(--error-soft); color: var(--error); }
+  .cb-tip { position: relative; text-decoration: underline dotted; text-underline-offset: 3px; outline: none; }
+  .cb-tip-box { display: none; position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 30; grid-template-columns: auto auto; gap: 4px 16px;
+    padding: 9px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.14);
+    white-space: nowrap; font-size: 12.5px; font-weight: 400; color: var(--text); text-align: left; }
+  .cb-tip-box b { text-align: right; font-weight: 600; }
+  .cb-tip-box .cb-tip-total { padding-top: 4px; border-top: 1px solid var(--border); font-weight: 700; }
+  .cb-tip:hover .cb-tip-box, .cb-tip:focus .cb-tip-box { display: grid; }
+  .cb-real-sum { margin: 0 0 4px; font-size: 13px; color: var(--text); min-height: 1em; }
 </style>
+<script>
+  // La suma de los dos tanques mientras se edita (pedido del usuario, 2026-11-05).
+  document.addEventListener('DOMContentLoaded', function () {
+    var pop = document.getElementById('cb-pop-real');
+    if (!pop) return;
+    var reg = pop.querySelector('[name=real_regular]'), prem = pop.querySelector('[name=real_premium]'), out = pop.querySelector('[data-real-sum]');
+    var fmt = function (v) { return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var update = function () {
+      var a = parseFloat(reg.value), b = parseFloat(prem.value);
+      if (isNaN(a) && isNaN(b)) { out.textContent = 'Los dos vacíos: se borra el inventario final real.'; return; }
+      out.innerHTML = (isNaN(a) ? '?' : fmt(a)) + ' + ' + (isNaN(b) ? '?' : fmt(b)) + ' = <strong>' + (isNaN(a) || isNaN(b) ? '?' : fmt(a + b)) + '</strong> gal';
+    };
+    reg.addEventListener('input', update);
+    prem.addEventListener('input', update);
+  });
+</script>
 {% endblock %}
