@@ -113,6 +113,20 @@ def _ensure_schema(conn):
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fisico_photos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            year INTEGER NOT NULL,
+            month INTEGER NOT NULL,
+            filename TEXT,
+            content_type TEXT NOT NULL,
+            data BLOB NOT NULL,
+            uploaded_at TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_fisico_photos_month ON fisico_photos(year, month)")
     conn.commit()
 
 
@@ -368,6 +382,58 @@ def set_month_real_ending(year, month, gallons, reading_date=None):
             """,
             (year, month, gallons, _date_key(reading_date), now),
         )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# Fotos del inventario final (pedido del usuario, 2026-11-05): los tickets
+# "Inventory Report" de los tanques, como las imágenes pegadas al lado de la
+# hoja Fisico del Cierre. Se guardan en la base (no en disco: en Render el
+# disco no persiste), ya achicadas por webapp al subirlas.
+def add_photo(year, month, filename, content_type, data):
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "INSERT INTO fisico_photos (year, month, filename, content_type, data, uploaded_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+            (year, month, filename, content_type, data, _now()),
+        ).fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+    return row[0]
+
+
+def get_month_photos(year, month):
+    """Las fotos del mes sin la imagen, en el orden en que se subieron."""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, filename, uploaded_at FROM fisico_photos WHERE year = ? AND month = ? ORDER BY id",
+            (year, month),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_photo(photo_id):
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT * FROM fisico_photos WHERE id = ?", (photo_id,)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    photo = dict(row)
+    photo["data"] = bytes(photo["data"])
+    return photo
+
+
+def delete_photo(photo_id):
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM fisico_photos WHERE id = ?", (photo_id,))
         conn.commit()
     finally:
         conn.close()

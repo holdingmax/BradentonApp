@@ -3188,7 +3188,8 @@
               var maxLeft = window.innerWidth - panel.offsetWidth - 8;
               if (rect.left > maxLeft) panel.style.left = Math.max(8, maxLeft) + 'px';
               var maxTop = window.innerHeight - panel.offsetHeight - 8;
-              if (parseFloat(panel.style.top) > maxTop) panel.style.top = (rect.top - panel.offsetHeight - 6) + 'px';
+              // Arriba del disparador, sin salirse por el borde de arriba (fotos altas).
+              if (parseFloat(panel.style.top) > maxTop) panel.style.top = Math.max(8, Math.min(maxTop, rect.top - panel.offsetHeight - 6)) + 'px';
             });
           }
           event.stopPropagation();

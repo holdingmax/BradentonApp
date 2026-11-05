@@ -83,7 +83,7 @@ Solo lo vigente. El Estado actual largo de los chats 19 a 34 (con todos los pend
 - **`webapp.py`**: toda la app Flask (rutas, login, jobs). Las rutas son pegamento: la lógica de negocio vive en los módulos de dominio.
 - **Patrón por módulo**: `modulo.py` (lectura/extracción/cálculo, sin UI) + `modulo_db.py` (conexión por `db.py`: SQLite en `reportes_data/` en la PC, o el esquema del mismo nombre de PostgreSQL con `DATABASE_URL`; las tablas de Postgres las crean las migraciones de `migraciones/`) + templates en `templates/` (63; `base.html` es el layout compartido: barra lateral, header, popovers, avisos, barra de progreso).
 - **Base de datos** (pase a PostgreSQL, chat 34; plan en `PLAN_POSTGRES.md`).
-  - **Con o sin `DATABASE_URL`**: sin ella, el SQLite de siempre (la PC: la app no lee el `.env`). Con ella, Postgres con un esquema por base y las migraciones de Alembic (`migraciones/`, 0001 a 0023), que la app aplica sola al arrancar.
+  - **Con o sin `DATABASE_URL`**: sin ella, el SQLite de siempre (la PC: la app no lee el `.env`). Con ella, Postgres con un esquema por base y las migraciones de Alembic (`migraciones/`, 0001 a 0024), que la app aplica sola al arrancar.
   - **Dónde va cada cosa**: la configuración (usuarios, clave de sesión, reglas, límite de Caja, Sale Tax) por `config_store.py`, esquema `config`. Los archivos de datos por `app_paths.DATA_DIR` / `app_paths.config_file(...)`, nunca la carpeta del código.
   - **Para cualquier cambio de base**:
     - Conexión con `db.connect(esquema, ruta_sqlite, init_sqlite)`.

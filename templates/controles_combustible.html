@@ -16,7 +16,7 @@
 <div class="page-header">
   <span class="eyebrow">Controles</span>
   <h1>Combustible</h1>
-  <p class="page-subtitle">El stock de galones contra la medición, el margen por galón y el cuadro de la hoja Físico, con lo ya cargado. Tocá un número subrayado para ver de dónde sale.</p>
+  <p class="page-subtitle">El stock de galones contra el inventario final real, el margen por galón y el cuadro de la hoja Físico con las fotos del inventario, con lo ya cargado. Tocá un número subrayado para ver de dónde sale.</p>
 </div>
 
 <div class="card">
@@ -42,12 +42,23 @@
       <span>Inventario inicial</span><strong class="{{ 'cb-bad' if c.initial_source == 'default' }}">{{ gal(c.initial_gallons) }}</strong>
       <span>+ Recibido de J.H.</span><strong>{{ gal(c.received_gallons) }}</strong>
       <span>− Vendido</span><strong>{{ gal(c.sold_gallons) }}</strong>
-      <span class="cb-total">= Stock teórico{% if c.last_loaded %} al {{ dmy(c.last_loaded) }}{% endif %}</span><strong class="cb-total {{ 'cb-bad' if c.final_stock < 0 }}">{{ gal(c.final_stock) }}</strong>
-      <span>Valor al PPP ({{ money(c.ppp, 4) }})</span><strong>{{ money(c.final_value) }}</strong>
+      <span class="cb-total">= Inventario final teórico{% if c.last_loaded %} al {{ dmy(c.last_loaded) }}{% endif %}</span><strong class="cb-total {{ 'cb-bad' if c.final_stock < 0 }}">{{ gal(c.final_stock) }}</strong>
+      {% if r %}
+      <span>Inventario final real{% if r.date %} <span class="cb-note">medido el {{ dmy(r.date) }}</span>{% endif %}</span><strong>{{ gal(r.gallons) }}</strong>
+      {% set off = r.diff_pct is not none and r.diff_pct|abs > 0.01 %}
+      <span class="cb-total">Diferencia <span class="cb-note">teórico − real</span></span><strong class="cb-total {{ 'cb-bad' if off }}">{{ gal(r.diff) }} <span class="cb-pct {{ 'cb-pct-bad' if off else 'cb-pct-ok' }}">{{ pct(r.diff_pct) }}</span></strong>
+      {% else %}
+      <span>Inventario final real</span><strong class="cb-soft">Sin cargar</strong>
+      {% endif %}
     </div>
+    {% if r and r.cut != c.last_loaded %}<p class="cb-foot">La diferencia es contra el teórico al {{ dmy(r.cut) }} ({{ gal(r.theoretical) }} gal).</p>{% endif %}
+    {% if r and r.incomplete %}<p class="cb-foot cb-warn">Faltan Close Store hasta el {{ dmy(r.cut) }}: el teórico todavía no está completo.</p>{% endif %}
     <p class="cb-foot">Inicial: {{ gal(c.initial_gallons) }} gal por {{ money(c.initial_amount) }}, {{ sources.get(c.initial_source, c.initial_source) }}.</p>
     {# Editar el inicial sin ir a Físico (pedido del usuario, 2026-11-03): el mismo guardado de Físico, que vuelve acá; en un cuadro flotante para no mover la página. #}
-    <button type="button" class="popover-trigger cb-link cb-edit-link" data-popover-target="cb-pop-initial">Editar inventario inicial</button>
+    <div class="cb-edit-links">
+      <button type="button" class="popover-trigger cb-link cb-edit-link" data-popover-target="cb-pop-initial">Editar inventario inicial</button>
+      <button type="button" class="popover-trigger cb-link cb-edit-link" data-popover-target="cb-pop-real">{{ 'Editar' if r else 'Cargar' }} inventario final real</button>
+    </div>
     <div class="popover-panel cb-pop" id="cb-pop-initial">
       <div class="cb-pop-title">Inventario inicial de {{ month_name|lower }}</div>
       <form method="post" action="{{ url_for('fisico_ajustar_inicial') }}" class="cb-edit-form">
@@ -60,21 +71,18 @@
       </form>
       <p class="cb-foot">Los dos juntos. Vacíos, vuelve a tomar el final teórico del mes anterior.</p>
     </div>
-  </div>
-
-  <div class="cb-tile">
-    <div class="cb-tile-label">Medición</div>
-    {% if r %}
-    <div class="cb-lines">
-      <span>Medido{% if r.date %} el {{ dmy(r.date) }}{% endif %}</span><strong>{{ gal(r.gallons) }}</strong>
-      <span>Teórico al {{ dmy(r.cut) }}</span><strong>{{ gal(r.theoretical) }}</strong>
-      <span class="cb-total">Diferencia <span class="cb-note">teórico − real</span></span><strong class="cb-total {{ 'cb-bad' if r.diff_pct is not none and r.diff_pct|abs > 0.01 }}">{{ gal(r.diff) }} gal</strong>
-      <span></span><span class="cb-sub">{{ pct(r.diff_pct) }} · {{ money(r.diff_amount) }} al PPP</span>
+    <div class="popover-panel cb-pop" id="cb-pop-real">
+      <div class="cb-pop-title">Inventario final real de {{ month_name|lower }}</div>
+      <form method="post" action="{{ url_for('fisico_lectura_real') }}" class="cb-edit-form">
+        <input type="hidden" name="year" value="{{ year }}">
+        <input type="hidden" name="month" value="{{ month }}">
+        <input type="hidden" name="return_to" value="combustible">
+        <label>Galones <input type="number" step="0.01" name="real_gallons" value="{{ r.gallons if r else '' }}"></label>
+        <label>Medido el <input type="date" name="real_reading_date" value="{{ r.date.isoformat() if r and r.date else '' }}"></label>
+        <button type="submit" class="btn-accent">Guardar</button>
+      </form>
+      <p class="cb-foot">El volumen de los dos tanques del ticket del inventario. Vacío, se borra.</p>
     </div>
-    {% if r.incomplete %}<p class="cb-foot cb-warn">Faltan Close Store hasta el {{ dmy(r.cut) }}: el teórico todavía no está completo.</p>{% endif %}
-    {% else %}
-    <p class="muted cb-empty">No hay medición cargada este mes. Se carga en Físico.</p>
-    {% endif %}
   </div>
 
   <div class="cb-tile">
@@ -127,6 +135,7 @@
 {# El cuadro de la hoja Fisico del Cierre (pedido del usuario, 2026-11-03): mismas filas, totales y PPP. #}
 {% set s = c.sheet %}
 {% macro idm(iso) %}{{ iso[8:10] ~ '/' ~ iso[5:7] if iso else '' }}{% endmacro %}
+<div class="cb-bottom">
 <div class="card">
   <div class="cb-sheet-head">
     <h2>Físico de {{ month_name|lower }} {{ year }}</h2>
@@ -135,11 +144,8 @@
   <div class="historial-table-wrap">
     <table class="historial-table cb-sheet">
       <colgroup><col><col class="cb-col-date"><col class="cb-col-date"><col class="cb-col-num"><col class="cb-col-num"><col class="cb-col-num"></colgroup>
-      <thead>
-        <tr><th></th><th>Fecha</th><th>Vence</th><th>Galones</th><th>$</th><th>$ / gal</th></tr>
-      </thead>
       <tbody>
-        <tr class="cb-sheet-section"><td colspan="6">Compras del mes</td></tr>
+        <tr class="cb-sheet-section"><td>Compras del mes</td><td>Fecha</td><td>Vence</td><td>Galones</td><td>$</td><td>$ / gal</td></tr>
         <tr>
           <td>Inventario Inicial Teórico <span class="cb-note">{{ sources.get(s.initial_source, s.initial_source) }}</span></td>
           <td></td><td></td>
@@ -158,7 +164,7 @@
           <td>Total Compras</td><td></td><td></td>
           <td>{{ gal(s.total_gallons) }}</td><td>{{ money(s.total_amount) }}</td><td>{{ money(c.ppp, 4) }}</td>
         </tr>
-        <tr class="cb-sheet-section"><td colspan="6">Cierre del mes</td></tr>
+        <tr class="cb-sheet-section"><td>Cierre del mes</td><td></td><td></td><td>Galones</td><td>$</td><td>$ / gal</td></tr>
         <tr class="cb-sheet-sales">
           <td>Ventas <span class="cb-note">{{ gal(-s.ventas_gallons) }} gal × PPP</span></td><td></td><td></td>
           <td>{{ gal(s.ventas_gallons) }}</td><td>{{ money(s.ventas_amount) }}</td><td>{{ money(c.ppp, 4) }}</td>
@@ -173,7 +179,7 @@
           {% if s.real_gallons is not none %}
           <td>{{ gal(s.real_gallons) }}</td><td>{{ money(s.real_gallons * c.ppp) if c.ppp is not none else '—' }}</td><td>{{ money(c.ppp, 4) }}</td>
           {% else %}
-          <td colspan="3" class="cb-soft">Sin medición cargada</td>
+          <td colspan="3" class="cb-soft">Sin cargar</td>
           {% endif %}
         </tr>
         {% if s.diferencia_gallons is not none %}
@@ -189,6 +195,34 @@
     </table>
   </div>
   <p class="cb-foot">Las ventas son los galones de los Close Store del mes{% if c.last_loaded %} (hasta el {{ dmy(c.last_loaded) }}){% endif %}, valuadas al PPP como en la hoja. Las facturas se cargan en Carga de Datos → Combustible.</p>
+</div>
+
+{# Fotos del inventario final (pedido del usuario, 2026-11-05): los tickets de los tanques, como en la hoja Fisico del Cierre. #}
+<div class="card cb-photos">
+  <h2>Fotos del inventario final</h2>
+  {% if photos %}
+  <div class="cb-photo-list">
+    {% for p in photos %}
+    <div class="cb-photo">
+      <button type="button" class="popover-trigger cb-photo-thumb" data-popover-target="cb-pop-photo-{{ p.id }}"><img src="{{ url_for('fisico_foto', photo_id=p.id) }}" alt="Foto del inventario {{ loop.index }}" loading="lazy"></button>
+      <div class="popover-panel cb-pop-photo" id="cb-pop-photo-{{ p.id }}"><img src="{{ url_for('fisico_foto', photo_id=p.id) }}" alt="Foto del inventario {{ loop.index }}"></div>
+      <form method="post" action="{{ url_for('fisico_foto_eliminar', photo_id=p.id) }}" onsubmit="return confirm('¿Borrar esta foto?');">
+        <button type="submit" class="cb-link cb-photo-del">Borrar</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted cb-empty">Todavía no hay fotos de {{ month_name|lower }}.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('fisico_fotos_subir') }}" enctype="multipart/form-data" class="cb-photo-form">
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <input type="file" name="fotos" accept="image/*,application/pdf" multiple required>
+    <button type="submit" class="btn-accent">Subir fotos</button>
+  </form>
+  <p class="cb-foot">Fotos o PDF del ticket "Inventory Report" de los tanques. Tocá una foto para verla grande.</p>
+</div>
 </div>
 
 {% endif %}
@@ -216,7 +250,7 @@
   .cb-sheet tbody tr:nth-child(even) { background: none; }
   .cb-sheet tbody td { border-bottom: 1px solid var(--border); padding-top: 9px; padding-bottom: 9px; }
   .cb-sheet tbody tr:last-child td { border-bottom: 0; }
-  .cb-sheet tbody tr.cb-sheet-section td { padding: 14px 14px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); background: var(--surface-alt); }
+  .cb-sheet tbody tr.cb-sheet-section td { padding: 14px 14px 6px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); background: var(--surface-alt); }
   .cb-sheet-total td { font-weight: 700; border-top: 2px solid var(--border); }
   .cb-sheet-sales td { color: var(--error); }
   .cb-sheet-sales td:first-child { font-weight: 600; }
@@ -228,7 +262,23 @@
   .cb-pct-bad { background: var(--error-soft); color: var(--error); }
   .cb-note { font-size: 11.5px; font-weight: 400; color: var(--text-soft); margin-left: 4px; }
 
-  button.cb-edit-link { display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 400; }
+  .cb-edit-links { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 10px; }
+  button.cb-edit-link { display: inline-block; font-size: 12.5px; font-weight: 400; }
+  .cb-bottom { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+  .cb-bottom > .card { margin-bottom: 0; }
+  @media (max-width: 1100px) { .cb-bottom { grid-template-columns: minmax(0, 1fr); } }
+  .cb-photos h2 { margin: 0 0 12px; }
+  .cb-photo-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+  .cb-photo { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .cb-photo form { margin: 0; }
+  button.cb-photo-thumb { display: block; width: 100%; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-alt); }
+  .cb-photo-thumb img { display: block; width: 100%; height: 190px; object-fit: cover; object-position: top; }
+  .cb-pop-photo { padding: 6px; }
+  .cb-pop-photo img { display: block; max-height: 82vh; max-width: min(560px, calc(100vw - 32px)); }
+  button.cb-photo-del { font-size: 12px; font-weight: 400; }
+  .cb-photo-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
+  .cb-photo-form input[type=file] { max-width: 100%; font-size: 12.5px; }
+  .cb-photo-form button { margin: 0; }
   .cb-pop { width: 340px; max-width: calc(100vw - 16px); padding: 12px 14px; font-size: 12.5px; line-height: 1.5; }
   .cb-pop-wide { width: 460px; }
   .cb-pop p { margin: 0 0 8px; }
@@ -248,7 +298,7 @@
   .cb-pop-table th, .cb-pop-table td { padding: 4px 6px; text-align: right; white-space: nowrap; }
   .cb-pop-table th:first-child, .cb-pop-table td:first-child, .cb-pop-table th:nth-child(2), .cb-pop-table td:nth-child(2) { text-align: left; }
 
-  .cb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .cb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin: 24px 0; }
   .cb-tile { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 14px 16px; box-shadow: var(--shadow-sm); }
   .cb-tile-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--accent); margin-bottom: 10px; }
   .cb-lines { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; font-size: 13.5px; }

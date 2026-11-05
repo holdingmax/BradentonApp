@@ -12,6 +12,7 @@ igual que el desktop, probando cada uno antes de seguir con el próximo.
 
 import calendar
 import hmac
+import io
 import itertools
 import json
 import app_paths
@@ -2179,11 +2180,90 @@ def fisico_lectura_real():
     try:
         gallons_value = float(gallons_raw) if gallons_raw else None
         fisico_db.set_month_real_ending(year, month, gallons_value, reading_date)
-        flash("Lectura física guardada.", "success")
+        flash("Inventario final real guardado.", "success")
     except ValueError:
         flash("No se pudo guardar: los galones tienen que ser un número válido.", "error")
 
-    return redirect(url_for("fisico_view", year=year, month=month))
+    # También se carga desde Controles → Combustible (pedido del usuario, 2026-11-05).
+    back_endpoint = "controles_combustible" if request.form.get("return_to") == "combustible" else "fisico_view"
+    return redirect(url_for(back_endpoint, year=year, month=month))
+
+
+_FISICO_PHOTO_MAX_SIDE = 1800
+
+
+def _fisico_photo_images(upload):
+    """
+    Las imágenes de un archivo subido a Fotos del inventario final: una foto
+    o cada página de un PDF (los que llegan por WhatsApp). ValueError si no
+    es ninguna de las dos cosas.
+    """
+    from PIL import Image, ImageOps
+
+    raw = upload.read()
+    if raw[:5] == b"%PDF-":
+        import pdfplumber
+
+        with pdfplumber.open(io.BytesIO(raw)) as pdf:
+            return [ocr_utils.render_page(page, 150) for page in pdf.pages]
+    try:
+        image = Image.open(io.BytesIO(raw))
+        image.load()
+    except Exception:
+        raise ValueError("no es una foto ni un PDF")
+    return [ImageOps.exif_transpose(image).convert("RGB")]
+
+
+@app.route("/fisico/fotos", methods=["POST"])
+def fisico_fotos_subir():
+    """
+    Fotos del inventario final del mes (pedido del usuario, 2026-11-05): los
+    tickets de los tanques, como las imágenes pegadas al lado de la hoja
+    Fisico. Se guardan achicadas en JPEG, cada archivo por separado.
+    """
+    year = request.form.get("year", type=int)
+    month = request.form.get("month", type=int)
+    uploads = [f for f in request.files.getlist("fotos") if f and f.filename]
+    if not (year and month and 1 <= month <= 12) or not uploads:
+        flash("Elegí al menos una foto.", "error")
+        return redirect(url_for("controles_combustible", year=year, month=month))
+    saved, failed = 0, 0
+    for upload in uploads:
+        name = os.path.basename(upload.filename)
+        try:
+            images = _fisico_photo_images(upload)
+        except Exception:
+            failed += 1
+            continue
+        for image in images:
+            image.thumbnail((_FISICO_PHOTO_MAX_SIDE, _FISICO_PHOTO_MAX_SIDE))
+            buffer = io.BytesIO()
+            image.save(buffer, "JPEG", quality=85, optimize=True)
+            fisico_db.add_photo(year, month, name, "image/jpeg", buffer.getvalue())
+            saved += 1
+    if saved:
+        flash(f"Se guardaron {saved} foto{'s' if saved != 1 else ''}.", "success")
+    if failed:
+        flash(("Un archivo no se pudo leer" if failed == 1 else f"{failed} archivos no se pudieron leer") + ": tiene que ser una foto o un PDF.", "error")
+    return redirect(url_for("controles_combustible", year=year, month=month))
+
+
+@app.route("/fisico/fotos/<int:photo_id>")
+def fisico_foto(photo_id):
+    photo = fisico_db.get_photo(photo_id)
+    if not photo:
+        abort(404)
+    return send_file(io.BytesIO(photo["data"]), mimetype=photo["content_type"], max_age=86400)
+
+
+@app.route("/fisico/fotos/<int:photo_id>/eliminar", methods=["POST"])
+def fisico_foto_eliminar(photo_id):
+    photo = fisico_db.get_photo(photo_id)
+    if photo:
+        fisico_db.delete_photo(photo_id)
+        flash("Foto borrada.", "success")
+    year, month = (photo["year"], photo["month"]) if photo else (None, None)
+    return redirect(url_for("controles_combustible", year=year, month=month))
 
 
 @app.route("/carga-datos/reporte-mensual")
@@ -7397,6 +7477,7 @@ def controles_combustible():
     return render_template(
         "controles_combustible.html",
         control=control_combustible.build_control(year, month),
+        photos=fisico_db.get_month_photos(year, month),
         **_month_nav(year, month),
         accent="#92400E",
         accent_soft="#FDE8CE",
