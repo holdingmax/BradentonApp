@@ -129,6 +129,9 @@ def _ensure_schema(conn):
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_fisico_photos_month ON fisico_photos(year, month)")
+    # Lo que se leyó de cada foto (pedido del usuario, 2026-11-05): llena T1 y T2 al editar el inventario real.
+    _ensure_columns(conn, "fisico_photos", {"read_at": "TEXT", "reading_date": "TEXT",
+                                            "reading_regular": "REAL", "reading_premium": "REAL"})
     conn.commit()
 
 
@@ -402,12 +405,19 @@ def set_month_real_ending(year, month, gallons, reading_date=None, regular=None,
 # "Inventory Report" de los tanques, como las imágenes pegadas al lado de la
 # hoja Fisico del Cierre. Se guardan en la base (no en disco: en Render el
 # disco no persiste), ya achicadas por webapp al subirlas.
-def add_photo(year, month, filename, content_type, data):
+def add_photo(year, month, filename, content_type, data, reading=None):
+    """reading: lo leído de la foto (fisico_fotos.read_inventory) o None si no se pudo leer."""
+    now = _now()
+    when, regular, premium = _reading_values(reading)
     conn = _connect()
     try:
         row = conn.execute(
-            "INSERT INTO fisico_photos (year, month, filename, content_type, data, uploaded_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-            (year, month, filename, content_type, data, _now()),
+            """
+            INSERT INTO fisico_photos (year, month, filename, content_type, data, uploaded_at,
+                                       read_at, reading_date, reading_regular, reading_premium)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+            """,
+            (year, month, filename, content_type, data, now, now, when, regular, premium),
         ).fetchone()
         conn.commit()
     finally:
@@ -415,12 +425,36 @@ def add_photo(year, month, filename, content_type, data):
     return row[0]
 
 
+def _reading_values(reading):
+    if not reading:
+        return None, None, None
+    when = reading.get("date")
+    return (when.date().isoformat() if when else None), float(reading["tanks"][1]), float(reading["tanks"][2])
+
+
+def set_photo_reading(photo_id, reading):
+    """Guarda lo leído de una foto subida antes de que se guardaran las lecturas."""
+    when, regular, premium = _reading_values(reading)
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE fisico_photos SET read_at = ?, reading_date = ?, reading_regular = ?, reading_premium = ? WHERE id = ?",
+            (_now(), when, regular, premium, photo_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_month_photos(year, month):
     """Las fotos del mes sin la imagen, en el orden en que se subieron."""
     conn = _connect()
     try:
         rows = conn.execute(
-            "SELECT id, filename, uploaded_at FROM fisico_photos WHERE year = ? AND month = ? ORDER BY id",
+            """
+            SELECT id, filename, uploaded_at, read_at, reading_date, reading_regular, reading_premium
+            FROM fisico_photos WHERE year = ? AND month = ? ORDER BY id
+            """,
             (year, month),
         ).fetchall()
     finally:

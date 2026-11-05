@@ -41,7 +41,7 @@
   <div class="cb-tile">
     {% macro at_ppp(g) %}{{ money(g * c.ppp) if g is not none and c.ppp is not none else '—' }}{% endmacro %}
     <div class="cb-lines cb-lines-3">
-      <span></span><em>Galones</em><em>$</em>
+      <span></span><em>Galones</em><em class="cb-col-center">$</em>
       <span>Inventario inicial</span><strong class="{{ 'cb-bad' if c.initial_source == 'default' }}">{{ gal(c.initial_gallons) }}</strong><strong>{{ money(c.initial_amount) }}</strong>
       <span>+ Recibido de J.H.</span><strong>{{ gal(c.received_gallons) }}</strong><strong>{{ money(c.received_amount) }}</strong>
       <span>− Vendido <span class="cb-note">al PPP</span></span><strong>{{ gal(c.sold_gallons) }}</strong><strong>{{ at_ppp(c.sold_gallons) }}</strong>
@@ -80,12 +80,19 @@
         <input type="hidden" name="year" value="{{ year }}">
         <input type="hidden" name="month" value="{{ month }}">
         <input type="hidden" name="return_to" value="combustible">
-        <label>Regular (T1) <input type="number" step="0.01" name="real_regular" value="{{ '{:g}'.format(r.regular) if r and r.regular is not none else '' }}"></label>
-        <label>Premium (T2) <input type="number" step="0.01" name="real_premium" value="{{ '{:g}'.format(r.premium) if r and r.premium is not none else '' }}"></label>
-        <label>Medido el <input type="date" name="real_reading_date" value="{{ r.date.isoformat() if r and r.date else '' }}"></label>
+        {# T1 y T2: lo guardado, o lo que se leyó de la foto del cierre (pedido del usuario, 2026-11-05). #}
+        {% set pr = photo_reading %}
+        {% set t1 = r.regular if r and r.regular is not none else pr.regular %}
+        {% set t2 = r.premium if r and r.premium is not none else pr.premium %}
+        {% set when = r.date if r and r.date else pr.date %}
+        <label>Regular (T1) <input type="number" step="0.01" name="real_regular" value="{{ '{:g}'.format(t1) if t1 is not none else '' }}"></label>
+        <label>Premium (T2) <input type="number" step="0.01" name="real_premium" value="{{ '{:g}'.format(t2) if t2 is not none else '' }}"></label>
+        <label>Medido el <input type="date" name="real_reading_date" value="{{ when.isoformat() if when else '' }}"></label>
         <button type="submit" class="btn-accent">Guardar</button>
       </form>
-      <p class="cb-real-sum" data-real-sum>{% if r and r.regular is not none and r.premium is not none %}{{ gal(r.regular) }} + {{ gal(r.premium) }} = <strong>{{ gal(r.gallons) }}</strong> gal{% elif r %}Cargado {{ gal(r.gallons) }} gal, sin separar por tanque.{% endif %}</p>
+      <p class="cb-real-sum" data-real-sum>{% if t1 is not none and t2 is not none %}{{ gal(t1) }} + {{ gal(t2) }} = <strong>{{ gal(t1 + t2) }}</strong> gal{% elif r %}Cargado {{ gal(r.gallons) }} gal, sin separar por tanque.{% endif %}</p>
+      {% if pr.regular is not none %}<p class="cb-foot cb-photo-read">La foto{% if pr.date %} del {{ dmy(pr.date) }}{% endif %} leyó T1 {{ gal(pr.regular) }} + T2 {{ gal(pr.premium) }} = {{ gal(pr.regular + pr.premium) }} gal.</p>
+      {% elif pr.pending %}<p class="cb-foot cb-photo-read">Se están leyendo las fotos del inventario: recargá la página en un minuto.</p>{% endif %}
       <p class="cb-foot">El volumen (VOLUME) de cada tanque del ticket del inventario; el total es la suma. Los dos vacíos, se borra.</p>
     </div>
   </div>
@@ -319,6 +326,7 @@
   .cb-lines strong { text-align: right; }
   .cb-lines-3 { grid-template-columns: 1fr auto auto; column-gap: 22px; }
   .cb-lines-3 em { font-style: normal; font-size: 12px; font-weight: 600; color: var(--text-soft); text-align: right; }
+  .cb-lines-3 em.cb-col-center { text-align: center; }
   .cb-total { padding-top: 9px; border-top: 1px solid var(--border); font-weight: 700; }
   .cb-sub { display: block; font-size: 11.5px; color: var(--text-soft); text-align: right; }
   .cb-foot { font-size: 12px; color: var(--text-soft); margin: 10px 0 0; line-height: 1.45; }

@@ -2270,7 +2270,7 @@ def _run_fisico_fotos_job(job_id, paths, year, month):
                 image.thumbnail((_FISICO_PHOTO_MAX_SIDE, _FISICO_PHOTO_MAX_SIDE))
                 buffer = io.BytesIO()
                 image.save(buffer, "JPEG", quality=85, optimize=True)
-                fisico_db.add_photo(year, month, os.path.basename(path), "image/jpeg", buffer.getvalue())
+                fisico_db.add_photo(year, month, os.path.basename(path), "image/jpeg", buffer.getvalue(), photo["reading"])
                 saved += 1
                 if photo["reading"]:
                     readings.append(photo["reading"])
@@ -2296,6 +2296,56 @@ def _run_fisico_fotos_job(job_id, paths, year, month):
         )
     except Exception as exc:
         jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+
+
+_fisico_backfill_running = set()
+_fisico_backfill_lock = threading.Lock()
+
+
+def _fisico_backfill_readings(photo_ids):
+    """Lee en segundo plano las fotos subidas antes de que se guardara su lectura (una vez cada una)."""
+    from PIL import Image
+
+    try:
+        for photo_id in photo_ids:
+            photo = fisico_db.get_photo(photo_id)
+            if not photo:
+                continue
+            try:
+                reading = fisico_fotos.read_inventory(Image.open(io.BytesIO(photo["data"])).convert("RGB"))
+            except Exception:
+                reading = None
+            fisico_db.set_photo_reading(photo_id, reading)
+    finally:
+        with _fisico_backfill_lock:
+            _fisico_backfill_running.difference_update(photo_ids)
+
+
+def _fisico_photo_reading(year, month, photos):
+    """
+    Lo que se leyó de la foto del cierre del mes, para llenar T1 y T2 al
+    editar el inventario real (pedido del usuario, 2026-11-05): la del último
+    día del mes o del 1° del siguiente, la más tardía; una sin fecha, solo si
+    no hay otra. Las fotos todavía sin leer se leen en segundo plano.
+    """
+    unread = [p["id"] for p in photos if not p.get("read_at")]
+    with _fisico_backfill_lock:
+        unread = [i for i in unread if i not in _fisico_backfill_running]
+        _fisico_backfill_running.update(unread)
+    if unread:
+        threading.Thread(target=_fisico_backfill_readings, args=(unread,), daemon=True).start()
+    read = [p for p in photos if p.get("reading_regular") is not None and p.get("reading_premium") is not None]
+    month_end = date(year, month, calendar.monthrange(year, month)[1])
+    closing_days = {month_end.isoformat(), (month_end + timedelta(days=1)).isoformat()}
+    closing = [p for p in read if p.get("reading_date") in closing_days]
+    undated = [p for p in read if not p.get("reading_date")]
+    chosen = max(closing, key=lambda p: (p["reading_date"], p["id"])) if closing else (undated[-1] if undated else None)
+    return {
+        "pending": any(not p.get("read_at") for p in photos),
+        "date": date.fromisoformat(chosen["reading_date"]) if chosen and chosen.get("reading_date") else None,
+        "regular": chosen["reading_regular"] if chosen else None,
+        "premium": chosen["reading_premium"] if chosen else None,
+    }
 
 
 @app.route("/fisico/fotos/<int:photo_id>")
@@ -7525,10 +7575,12 @@ def controles_combustible():
     """
     year, month = _cierre_month()
     _active_job = jobs.get_active_job("fisico_fotos")
+    photos = fisico_db.get_month_photos(year, month)
     return render_template(
         "controles_combustible.html",
         control=control_combustible.build_control(year, month),
-        photos=fisico_db.get_month_photos(year, month),
+        photos=photos,
+        photo_reading=_fisico_photo_reading(year, month, photos),
         resume_job_id=(_active_job["id"] if _active_job else None),
         **_month_nav(year, month),
         accent="#92400E",
