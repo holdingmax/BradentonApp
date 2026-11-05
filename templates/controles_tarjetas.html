@@ -57,7 +57,25 @@
   button.tc-link { background: none; border: 0; padding: 0; margin: 0; box-shadow: none; font: inherit; font-weight: 700; }
   .tc-link { text-decoration: underline; text-underline-offset: 3px; color: var(--accent); font-variant-numeric: tabular-nums; }
   .tc-totals { margin-top: 10px; }
+  .tc-pend-detail { margin-top: 18px; padding-top: 4px; }
+  .tc-pend-detail h3 { margin: 18px 0 0; font-size: 15px; }
+  .tc-pend-detail .tc-table { min-width: 640px; }
+  .tc-pend-detail .tc-table td.tc-left, .tc-pend-detail .tc-table th.tc-left { text-align: left; }
+  .tc-pend-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 18px; padding: 12px 16px; border-radius: 10px; background: var(--accent-soft); font-size: 14px; }
+  .tc-pend-foot .btn-accent { text-decoration: none; margin: 0; }
 </style>
+<script>
+  // El detalle del pendiente aparece al tocar el monto (pedido del usuario, 2026-11-05).
+  document.addEventListener('DOMContentLoaded', function () {
+    var button = document.getElementById('tc-pend-toggle'), panel = document.getElementById('tc-pend-detail');
+    if (!button || !panel) return;
+    button.addEventListener('click', function () {
+      panel.hidden = !panel.hidden;
+      button.setAttribute('aria-expanded', String(!panel.hidden));
+      if (!panel.hidden) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+</script>
 {% endblock %}
 {% block content %}
 {% from "_month_jump.html" import month_jump %}
@@ -65,7 +83,7 @@
 <div class="page-header">
   <span class="eyebrow">Control de tarjetas</span>
   <h1>Tarjetas y Cupones</h1>
-  <p class="page-subtitle">Lo vendido con tarjeta en el C-store (Store Info) J.H. lo deposita como cupón (DDC) a los 2 días hábiles, y el EFT de cada semana usa esos DDC para pagar sus facturas. Tocá un monto subrayado para ver los DDC que lo componen.</p>
+  <p class="page-subtitle">Lo vendido con tarjeta en el C-store (Store Info) J.H. lo deposita como cupón (DDC) a los 2 días hábiles, y el EFT de cada semana usa esos DDC para pagar sus facturas. Tocá el pendiente para ver los DDC que lo forman.</p>
 </div>
 
 <div class="card">
@@ -85,73 +103,109 @@
   {% macro smoney(x) -%}{%- if x is none -%}—{%- elif x < 0 -%}-${{ "{:,.2f}".format(-x) }}{%- else -%}${{ "{:,.2f}".format(x) }}{%- endif -%}{%- endmacro %}
   {% macro ddmm(iso) -%}{{ iso[8:10] }}/{{ iso[5:7] }}{%- endmacro %}
 
-  {# Para la conciliación (pedido de Leti, 2026-11-03): los dos pendientes al cierre; tocando el monto se ven los DDC que lo componen. #}
+  {# Para la conciliación (pedido de Leti, 2026-11-03; un solo cuadro desde el 2026-11-05): el pendiente al cierre. Tocando el monto aparecen los DDC que lo forman y el PDF. #}
   {% set last = control.last %}
   <div class="tc-pending">
-    {% if last %}
     <div class="tc-tile">
-      <div class="tc-tile-label">Pendiente de acreditar al {{ ddmm(last.date) }}</div>
-      <div class="tc-tile-amount"><button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-sales">{{ money(last.pending) }}</button></div>
-      <div class="tc-tile-sub">Vendido con tarjeta que todavía no era DDC</div>
-      <div class="popover-panel tc-pop" id="tc-pop-sales">
-      <div class="tc-pop-title">DDC que trajeron lo vendido hasta el {{ ddmm(last.date) }}</div>
-      {% if next_month_ddc %}
-      <div class="tc-table-wrap">
-        <table class="tc-table">
-          <thead><tr><th class="tc-left">Depositado</th><th class="tc-left">DDC</th><th class="tc-left">Ventas del</th><th>Gross</th><th>Neto</th></tr></thead>
-          <tbody>
-            {% for g in next_month_ddc %}
-            {% for r in g.ddc_rows %}
-            <tr>
-              <td class="tc-left">{{ g.deposit.strftime('%d/%m') if g.deposit else '—' }}</td>
-              <td class="tc-left">{{ r.coupon }}</td>
-              <td class="tc-left">{% if loop.first %}{{ ddmm(g.from) }}{% if g.to != g.from %} al {{ ddmm(g.to) }}{% endif %}{% endif %}</td>
-              <td>{{ money(r.gross) }}</td>
-              <td>{{ money(r.net) }}</td>
-            </tr>
-            {% endfor %}
-            {% endfor %}
-          </tbody>
-          <tfoot><tr><td class="tc-left" colspan="3">Total</td><td>{{ money(next_month_totals.gross) }}</td><td>{{ money(next_month_totals.net) }}</td></tr></tfoot>
-        </table>
-      </div>
-      {% set gap = (next_month_totals.gross - last.pending)|round(2) %}
-      <p class="tc-note">Los DDC que J.H. depositó después del cierre con ventas de {{ month_name|lower }}.{% if gap %} La diferencia de {{ money(gap) }} con el pendiente son batches que cruzan de día o que no son del POS.{% endif %}</p>
-      {% else %}
-      <p class="tc-note">Todavía no llegaron los DDC de estas ventas (o falta cargar el detalle de cupones).</p>
-      {% endif %}
+      <div class="tc-tile-label">Pendiente de acreditar al {{ pending_until.strftime('%d/%m') }}</div>
+      <div class="tc-tile-amount"><button type="button" class="tc-link" id="tc-pend-toggle" aria-expanded="false" aria-controls="tc-pend-detail">{{ money(pending_total) }}</button></div>
+      <div class="tc-tile-sub">{% if last %}Vendido sin DDC {{ money(last.pending) }} + {% endif %}DDC sin aplicar {{ money(pending_ddc_totals.gross) }}</div>
+    </div>
+    {# El reintegro del loyalty de Chevron del mes, como el asiento de Ratio (pedido del usuario, 2026-11-05). #}
+    {% set ly = loyalty %}
+    <div class="tc-tile">
+      <div class="tc-tile-label">Ingresos loyalty Chevron de {{ month_name|lower }}</div>
+      <div class="tc-tile-amount"><button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-loyalty">{{ money(ly.total.gross) }}</button></div>
+      <div class="tc-tile-sub">{% if ly.rows %}{{ ly.count }} batches slri y de 7 dígitos, Gross{% if not ly.complete %} · <span class="tc-diff">detalle de cupones hasta el {{ ddmm(ly.covered_to) if ly.covered_to else '—' }}</span>{% endif %}{% else %}Sin detalle de cupones del mes{% endif %}</div>
+      <div class="popover-panel tc-pop" id="tc-pop-loyalty">
+        <div class="tc-pop-title">Ingresos loyalty Chevron de {{ month_name|lower }} {{ year }}</div>
+        <p class="tc-note" style="margin-top:0">Chevron devuelve el descuento de combustible que se da en la bomba (Desc. Comb) en los batches "slri…" y de 7 dígitos de los cupones de J.H. No son ventas de Store Info: se registran una vez por mes.</p>
+        <div class="tc-table-wrap">
+          <table class="tc-table">
+            <thead><tr><th class="tc-left">Cuenta</th><th>Debe</th><th>Haber</th></tr></thead>
+            <tbody>
+              <tr><td class="tc-left">{{ ly.debit_account }}</td><td>{{ money(ly.total.gross) }}</td><td></td></tr>
+              <tr><td class="tc-left">{{ ly.credit_account }}</td><td></td><td>{{ money(ly.total.gross) }}</td></tr>
+            </tbody>
+            <tfoot><tr><td class="tc-left" colspan="3">INGRESOS LOYALTY CHEVRON {{ month_upper }}</td></tr></tfoot>
+          </table>
+        </div>
+        {% if ly.rows %}
+        <div class="tc-table-wrap">
+          <table class="tc-table">
+            <thead><tr><th class="tc-left">Fecha</th><th>slri</th><th>7 dígitos</th><th>Gross</th><th>Fee</th><th>Neto</th></tr></thead>
+            <tbody>
+              {% for r in ly.rows %}
+              <tr><td class="tc-left">{{ ddmm(r.date) }}</td><td>{{ money(r.slri) }}</td><td>{{ money(r.other) }}</td><td>{{ money(r.gross) }}</td><td>{{ money(r.fees) }}</td><td>{{ money(r.net) }}</td></tr>
+              {% endfor %}
+            </tbody>
+            <tfoot><tr><td class="tc-left">Total</td><td>{{ money(ly.total.slri) }}</td><td>{{ money(ly.total.other) }}</td><td>{{ money(ly.total.gross) }}</td><td>{{ money(ly.total.fees) }}</td><td>{{ money(ly.total.net) }}</td></tr></tfoot>
+          </table>
+        </div>
+        {% if not ly.complete %}<p class="tc-note tc-diff">El detalle de cupones está cargado hasta el {{ ddmm(ly.covered_to) if ly.covered_to else '—' }}: faltan batches del mes.</p>{% endif %}
+        {% endif %}
       </div>
     </div>
+  </div>
+
+  <div class="tc-pend-detail" id="tc-pend-detail" hidden>
+    {% if last %}
+    <h3>Vendido con tarjeta sin DDC al {{ ddmm(last.date) }}: {{ money(last.pending) }}</h3>
+    {% if next_month_ddc %}
+    <div class="tc-table-wrap">
+      <table class="tc-table">
+        <thead><tr><th class="tc-left">Depositado</th><th class="tc-left">DDC</th><th class="tc-left">Ventas del</th><th>Gross</th><th>Neto</th></tr></thead>
+        <tbody>
+          {% for g in next_month_ddc %}
+          {% for r in g.ddc_rows %}
+          <tr>
+            <td class="tc-left">{{ g.deposit.strftime('%d/%m') if g.deposit else '—' }}</td>
+            <td class="tc-left">{{ r.coupon }}</td>
+            <td class="tc-left">{% if loop.first %}{{ ddmm(g.from) }}{% if g.to != g.from %} al {{ ddmm(g.to) }}{% endif %}{% endif %}</td>
+            <td>{{ money(r.gross) }}</td>
+            <td>{{ money(r.net) }}</td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><td class="tc-left" colspan="3">Total</td><td>{{ money(next_month_totals.gross) }}</td><td>{{ money(next_month_totals.net) }}</td></tr></tfoot>
+      </table>
+    </div>
+    {% set gap = (next_month_totals.gross - last.pending)|round(2) %}
+    <p class="tc-note">Los DDC que J.H. depositó después del cierre con ventas de {{ month_name|lower }}.{% if gap %} La diferencia de {{ money(gap) }} con lo vendido son batches que cruzan de día o que no son del POS.{% endif %}</p>
+    {% else %}
+    <p class="tc-note">Todavía no llegaron los DDC de estas ventas (o falta cargar el detalle de cupones).</p>
     {% endif %}
-    <div class="tc-tile">
-      <div class="tc-tile-label">DDC sin aplicar en un EFT al {{ pending_until.strftime('%d/%m') }}</div>
-      <div class="tc-tile-amount"><button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-ddc">{{ money(pending_ddc_totals.net) }}</button></div>
-      <div class="tc-tile-sub">{% if pending_ddc %}{{ pending_ddc|length }} DDC, Gross {{ money(pending_ddc_totals.gross) }}{% else %}Ninguno{% endif %}</div>
-      <div class="popover-panel tc-pop" id="tc-pop-ddc">
-      <div class="tc-pop-title">DDC sin aplicar en un EFT al {{ pending_until.strftime('%d/%m') }}</div>
-      {% if pending_ddc %}
-      <div class="tc-table-wrap">
-        <table class="tc-table">
-          <thead><tr><th class="tc-left">Fecha</th><th class="tc-left">DDC</th><th>Gross</th><th>Fee</th><th>Neto</th><th class="tc-left">Lo acreditó después</th></tr></thead>
-          <tbody>
-            {% for r in pending_ddc %}
-            <tr>
-              <td class="tc-left">{{ r.date_display }}</td>
-              <td class="tc-left">{{ r.coupons|join(', ') }}</td>
-              <td>{{ money(r.gross) }}</td>
-              <td>{{ money(r.fees) }}</td>
-              <td>{{ money(r.net) }}</td>
-              <td class="tc-left">{% for x in r.laters %}{{ x.rcv }} ({{ x.eft_date.strftime('%d/%m') }}){{ ', ' if not loop.last }}{% else %}Todavía en ningún EFT{% endfor %}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-          <tfoot><tr><td class="tc-left" colspan="2">Total</td><td>{{ money(pending_ddc_totals.gross) }}</td><td>{{ money(pending_ddc_totals.fees) }}</td><td>{{ money(pending_ddc_totals.net) }}</td><td></td></tr></tfoot>
-        </table>
-      </div>
-      {% else %}
-      <p class="tc-note">No hay DDC sin EFT al {{ pending_until.strftime('%d/%m') }}.</p>
-      {% endif %}
-      </div>
+    {% endif %}
+
+    <h3>DDC sin aplicar en un EFT al {{ pending_until.strftime('%d/%m') }}: {{ money(pending_ddc_totals.gross) }}</h3>
+    {% if pending_ddc %}
+    <div class="tc-table-wrap">
+      <table class="tc-table">
+        <thead><tr><th class="tc-left">Fecha</th><th class="tc-left">DDC</th><th>Gross</th><th>Fee</th><th>Neto</th><th class="tc-left">Lo aplicó después</th></tr></thead>
+        <tbody>
+          {% for r in pending_ddc %}
+          <tr>
+            <td class="tc-left">{{ r.date_display }}</td>
+            <td class="tc-left">{{ r.coupons|join(', ') }}</td>
+            <td>{{ money(r.gross) }}</td>
+            <td>{{ money(r.fees) }}</td>
+            <td>{{ money(r.net) }}</td>
+            <td class="tc-left">{% for x in r.laters %}{{ x.rcv }} ({{ x.eft_date.strftime('%d/%m') }}){{ ', ' if not loop.last }}{% else %}Todavía en ningún EFT{% endfor %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><td class="tc-left" colspan="2">Total</td><td>{{ money(pending_ddc_totals.gross) }}</td><td>{{ money(pending_ddc_totals.fees) }}</td><td>{{ money(pending_ddc_totals.net) }}</td><td></td></tr></tfoot>
+      </table>
+    </div>
+    <p class="tc-note">Los que en el Excel de Aplicación quedan sin pintar a fin de mes.</p>
+    {% else %}
+    <p class="tc-note">No hay DDC sin EFT al {{ pending_until.strftime('%d/%m') }}.</p>
+    {% endif %}
+
+    <div class="tc-pend-foot">
+      <span>Total pendiente de acreditar (Gross): <strong>{{ money(pending_total) }}</strong></span>
+      <a class="btn-accent" href="{{ url_for('controles_tarjetas_pendiente_pdf', year=year, month=month) }}">Exportar PDF</a>
     </div>
   </div>
   {% if control.kia_not_in_cards %}
@@ -161,40 +215,9 @@
   <p class="tc-note">Sin Store Info: {{ missing_days_display|join(", ") }}.</p>
   {% endif %}
 
-  {% if control.rows %}
-  <div class="tc-table-wrap">
-    <table class="tc-table tc-days">
-      <colgroup><col class="tc-col-date"><col><col><col></colgroup>
-      <thead>
-        <tr><th>Fecha</th><th>Vendido con tarjeta</th><th>Cupones del día</th><th>Vendido sin DDC todavía</th></tr>
-      </thead>
-      <tbody>
-        {% for row in control.rows %}
-        <tr class="{{ 'tc-row-off' if row.status in ('missing', 'later') else '' }}">
-          <td><strong>{{ row.date_display }}</strong></td>
-          <td>{{ money(row.sale) }}{% if row.kia %}<span class="tc-sub">incluye Kia/Toyota {{ money(row.kia) }}</span>{% endif %}</td>
-          <td>
-            {% if row.coupon_count %}{{ money(row.coupon_gross) }}<span class="tc-sub">{{ row.coupon_count }} DDC{% if row.coupon_other %} · {{ money(row.coupon_other) }} fuera de Store Info{% endif %}{% if row.pending is not none and row.coupon_previous %} · {{ money(row.coupon_previous) }} paga ventas anteriores{% endif %}</span>{% else %}—{% endif %}
-          </td>
-          <td>{{ money(row.pending) }}{% if row.status == 'missing' %}<span class="tc-sub">falta Store Info</span>{% elif row.segment_start %}<span class="tc-sub">arranca acá</span>{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr><td>Total del mes</td><td>{{ money(control.sales_total) }}</td><td>{{ money(control.coupon_total) }}</td><td></td></tr>
-      </tfoot>
-    </table>
-  </div>
-  {% else %}
-  <p class="tc-note">Sin Store Info de {{ month_name }} {{ year }} con las tarjetas leídas.</p>
-  {% endif %}
-
   <div class="tc-jh">
-    <h2>Reportes mensuales de J.H.</h2>
-    <p class="tc-note">Los reportes del mes que se bajan del portal de J.H. (EFT History, Invoice History y Credit Card Daily Summary), contra lo cargado en EFT y Cupones y contra Chase. Se suben en <a href="{{ url_for('carga_datos_eft') }}">Carga de Datos → EFT y Cupones</a> (<a href="{{ url_for('carga_datos_eft_jh', year=year, month=month) }}">ver los de este mes</a>).</p>
-
     {# ---------------- EFT ---------------- #}
-    <h3>EFT del mes</h3>
+    <h2>EFT del mes</h2>
     {% set e = jh.eft %}
     {% if not e %}
     {% if month_end_warnings_due(year, month) %}<div class="tc-control none"><div class="tc-control-title" style="margin:0;">Sin {{ jh_labels['eft'] }} de {{ month_name }} {{ year }}.</div></div>{% endif %}
@@ -235,46 +258,6 @@
     </details>
     {% endif %}
 
-    {# ---------------- Facturas ---------------- #}
-    <h3>Facturas del mes</h3>
-    {% set inv = jh.invoices %}
-    {% if not inv %}
-    {% if month_end_warnings_due(year, month) %}<div class="tc-control none"><div class="tc-control-title" style="margin:0;">Sin {{ jh_labels['invoices'] }} de {{ month_name }} {{ year }}.</div></div>{% endif %}
-    {% else %}
-    <div class="tc-control-grid tc-totals">
-      <span>Combustible ({{ inv.fuel_count }}, con BOL): <strong>{{ smoney(inv.fuel_total) }}</strong></span>
-      <span>Otras ({{ inv.other_count }}): <strong>{{ smoney(inv.other_total) }}</strong></span>
-      <span>Total del reporte: <strong>{{ smoney(inv.total) }}</strong></span>
-      {% if inv.unpaid_balance %}<span class="tc-diff">Saldo impago según J.H.: {{ smoney(inv.unpaid_balance) }}</span>{% endif %}
-    </div>
-    {% if inv.bad %}<p class="tc-note tc-diff">Pagadas por un importe distinto: {% for r in inv.bad %}{{ r.invoice }}{{ ', ' if not loop.last else '.' }}{% endfor %}</p>{% endif %}
-    {% if inv.pending %}<p class="tc-note">Sin EFT cargado: {% for r in inv.pending %}{{ r.invoice }} ({{ ddmm(r.date) }}){{ ', ' if not loop.last else '.' }}{% endfor %}</p>{% endif %}
-    {% if inv.unknown %}<p class="tc-note">Pagadas en los EFT del mes, de otro mes: {% for u in inv.unknown %}{{ u.invoice }} ({{ u.rcv }}){{ ', ' if not loop.last else '.' }}{% endfor %}</p>{% endif %}
-    <details open>
-      <summary>Ver las facturas</summary>
-      <div class="tc-table-wrap">
-        <table class="tc-table">
-          <thead><tr><th class="tc-left">Fecha</th><th class="tc-left">Factura</th><th class="tc-left">BOL</th><th>Reporte J.H.</th><th>Pagado en EFT</th><th class="tc-left">Estado</th></tr></thead>
-          <tbody>
-            {% for r in inv.rows %}
-            <tr>
-              <td class="tc-left">{{ ddmm(r.date) }}</td>
-              <td class="tc-left">{{ r.invoice }}</td>
-              <td class="tc-left">{{ r.bol or '—' }}</td>
-              <td>{{ smoney(r.amount) }}</td>
-              <td>{{ smoney(r.paid) }}{% if r.payments %}<span class="tc-sub">{% for p in r.payments %}{{ p.rcv }} ({{ ddmm(p.date) }}){{ ', ' if not loop.last }}{% endfor %}</span>{% endif %}</td>
-              <td class="tc-left">
-                {% if r.status == 'ok' %}<span class="tc-badge tc-badge-ok">OK</span>
-                {% elif r.status == 'diff' %}<span class="tc-badge tc-badge-alert">No coincide</span>
-                {% else %}<span class="tc-badge tc-badge-off">Sin EFT cargado</span>{% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </details>
-    {% endif %}
   </div>
 </div>
 {% endblock %}

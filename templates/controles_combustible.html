@@ -108,9 +108,10 @@
     </div>
     <div class="popover-panel cb-pop" id="cb-pop-price">
       <div class="cb-pop-title">Precio de venta</div>
-      <p>Lo vendido de combustible ÷ los galones vendidos, con los Close Store del mes{% if c.last_loaded %} (hasta el {{ dmy(c.last_loaded) }}){% endif %}. Lo vendido es la Venta Combustible del Control Cierre: Sales Fuel + Desc. Comb de cada día.</p>
+      <p>Como el Bce: (Ventas de combustible + Otros ingresos combustible) ÷ los galones vendidos, con los Close Store del mes{% if c.last_loaded %} (hasta el {{ dmy(c.last_loaded) }}){% endif %}. Las ventas son la Venta Combustible del Control Cierre (Sales Fuel + Desc. Comb de cada día); los otros ingresos, el REBATE GETTEL de Kia y Toyota (4.07).</p>
       <div class="cb-calc">
-        <span>Vendido</span><strong>{{ money(c.fuel_sales) }}</strong>
+        <span>Ventas de combustible</span><strong>{{ money(c.fuel_sales) }}</strong>
+        <span>+ Otros ingresos combustible</span><strong>{{ money(c.other_income) }}</strong>
         <span>÷ Galones vendidos</span><strong>{{ gal(c.sold_gallons) }}</strong>
         <span class="cb-calc-total">= Precio de venta</span><strong class="cb-calc-total">{{ money(c.price) }}</strong>
       </div>

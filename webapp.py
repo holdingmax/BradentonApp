@@ -7528,6 +7528,68 @@ def _ddc_pending(year, month, today):
     }
 
 
+def _tarjetas_month(year, month, today):
+    """Lo que usan Controles → Tarjetas y su PDF del pendiente: el control del mes y los DDC pendientes al cierre."""
+    control = control_tarjetas.build_month_control(
+        year, month, reportes_db.get_card_sales_by_date(), eft_db.get_coupon_gross_by_date(), today=today,
+        kia_sales=reportes_db.get_local_account_sales_by_date(),
+    )
+    pending = _ddc_pending(year, month, today)
+    last = control["last"]
+    # El pendiente al cierre (pedido del usuario, 2026-11-05): lo vendido con
+    # tarjeta que todavía no era DDC más los DDC que ningún EFT aplicó, los
+    # que en el Excel de Aplicación quedan sin pintar a fin de mes. Gross,
+    # como 1.03.02.
+    sales_pending = (last["pending"] or 0.0) if last else 0.0
+    pending["pending_total"] = round(sales_pending + (pending["pending_ddc_totals"]["gross"] or 0.0), 2)
+    return control, pending
+
+
+@app.route("/controles/tarjetas/pendiente/pdf")
+def controles_tarjetas_pendiente_pdf():
+    """El pendiente de acreditar al cierre, en PDF con membrete (pedido del usuario, 2026-11-05)."""
+    from pdf_export import build_multi_section_pdf
+
+    today = date.today()
+    year, month = _cierre_month()
+    control, p = _tarjetas_month(year, month, today)
+    last = control["last"]
+    money = lambda v: "—" if v is None else (f"-${-v:,.2f}" if v < 0 else f"${v:,.2f}")
+    ddmm = lambda iso: f"{iso[8:10]}/{iso[5:7]}" if iso else "—"
+    until = p["pending_until"].strftime("%d/%m/%Y")
+    sections = []
+    if last:
+        rows = []
+        for g in p["next_month_ddc"]:
+            for i, r in enumerate(g["ddc_rows"]):
+                sold = (ddmm(g["from"]) + (f" al {ddmm(g['to'])}" if g["to"] != g["from"] else "")) if i == 0 else ""
+                rows.append([g["deposit"].strftime("%d/%m/%Y") if g["deposit"] else "—", r["coupon"], sold, money(r["gross"]), money(r["net"])])
+        rows.append(["Total", "", "", money(p["next_month_totals"]["gross"]), money(p["next_month_totals"]["net"])])
+        sections.append({
+            "heading": f"Vendido con tarjeta sin DDC al {ddmm(last['date'])}: {money(last['pending'])}",
+            "headers": ["Depositado", "DDC", "Ventas del", "Gross", "Neto"],
+            "rows": rows, "bold_last_row": True,
+        } if len(rows) > 1 else {"heading": f"Vendido con tarjeta sin DDC al {ddmm(last['date'])}: {money(last['pending'])}",
+                                 "note": "Todavía no llegaron los DDC de estas ventas."})
+    rows = [[r["date_display"], ", ".join(r["coupons"]), money(r["gross"]), money(r["fees"]), money(r["net"]),
+             ", ".join(f"{x['rcv']} ({x['eft_date']:%d/%m})" for x in r["laters"]) or "Todavía en ningún EFT"]
+            for r in p["pending_ddc"]]
+    totals = p["pending_ddc_totals"]
+    rows.append(["Total", "", money(totals["gross"]), money(totals["fees"]), money(totals["net"]), ""])
+    sections.append({
+        "heading": f"DDC sin aplicar en un EFT al {until}: {money(totals['gross'])}",
+        "headers": ["Fecha", "DDC", "Gross", "Fee", "Neto", "Lo aplicó después"],
+        "rows": rows, "bold_last_row": True,
+    } if p["pending_ddc"] else {"heading": f"DDC sin aplicar en un EFT al {until}", "note": "Ninguno."})
+    sections.append({"note": f"<b>Total pendiente de acreditar al {until} (Gross): {money(p['pending_total'])}</b>, "
+                             "lo vendido con tarjeta sin DDC más los DDC sin aplicar en un EFT."})
+    workspace_dir = tempfile.mkdtemp(prefix="tarjetas_pendiente_pdf_")
+    dest_path = os.path.join(workspace_dir, f"Pendiente de acreditar {month:02d}-{year}.pdf")
+    build_multi_section_pdf(dest_path, "Tarjetas y Cupones: pendiente de acreditar", sections,
+                            period_label=f"{_MONTH_NAMES_ES[month - 1]} {year}, al {until}")
+    return send_file(dest_path, as_attachment=True, download_name=os.path.basename(dest_path))
+
+
 @app.route("/controles/tarjetas")
 def controles_tarjetas():
     """
@@ -7539,20 +7601,18 @@ def controles_tarjetas():
     """
     today = date.today()
     year, month = _cierre_month()
-    control = control_tarjetas.build_month_control(
-        year, month, reportes_db.get_card_sales_by_date(), eft_db.get_coupon_gross_by_date(), today=today,
-        kia_sales=reportes_db.get_local_account_sales_by_date(),
-    )
-    for row in control["rows"]:
-        row["date_display"] = _fmt_ddmmyyyy(row["date"])
+    control, pending = _tarjetas_month(year, month, today)
     detail_groups = eft_db.get_detail_groups()
+    loyalty = control_tarjetas.loyalty_month(year, month, detail_groups)
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
     next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
     return render_template(
         "controles_tarjetas.html",
         control=control,
         missing_days_display=[_fmt_ddmmyyyy(d) for d in control["missing_days"]],
-        **_ddc_pending(year, month, today),
+        loyalty=loyalty,
+        month_upper=control_cierre.MONTH_NAMES_UPPER[month - 1],
+        **pending,
         jh=_jh_month_checks(year, month, detail_groups),
         jh_labels=jh_mensual.KIND_LABELS,
         year=year,
@@ -7576,9 +7636,15 @@ def controles_combustible():
     year, month = _cierre_month()
     _active_job = jobs.get_active_job("fisico_fotos")
     photos = fisico_db.get_month_photos(year, month)
+    # 4.07 Otros ingresos combustible = el REBATE GETTEL del mes, que suma al precio de venta como en el Bce.
+    try:
+        rebate_entry = cuenta_kia_toyota.month_closing(_kia_toyota_ledger(), year, month)["entries"][0]
+        other_income = rebate_entry["lines"][1][2]
+    except Exception:
+        other_income = None
     return render_template(
         "controles_combustible.html",
-        control=control_combustible.build_control(year, month),
+        control=control_combustible.build_control(year, month, other_income),
         photos=photos,
         photo_reading=_fisico_photo_reading(year, month, photos),
         resume_job_id=(_active_job["id"] if _active_job else None),

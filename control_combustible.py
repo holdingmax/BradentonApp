@@ -39,7 +39,14 @@ def _last_purchase_before(day, all_invoices):
     return best
 
 
-def build_control(year, month):
+def build_control(year, month, other_income=None):
+    """
+    `other_income`: 4.07 OTROS INGRESOS COMBUSTIBLE del mes (el REBATE GETTEL
+    de Kia y Toyota). El precio de venta lo suma como el Bce: Precio Venta =
+    (4.01 Ventas de Combustible + 4.07) ÷ galones vendidos (BALANCE
+    HISTORICO, fila 125; septiembre 2026: (175,365.42 + 755.16) ÷ 41,541.65 =
+    4.2396). Pedido del usuario, 2026-11-05.
+    """
     report = fisico.build_month_report(year, month)
     ppp = _ratio(report["total_amount"], report["total_gallons"])
     invoices = fisico_db.get_month_invoices(year, month)
@@ -84,10 +91,15 @@ def build_control(year, month):
 
     sold_total = sum(d["sold"] or 0.0 for d in days)
     sales_total = sum(d["fuel_sales"] or 0.0 for d in days)
-    price_month = _ratio(sales_total, sold_total)
+    other_income = round(other_income or 0.0, 2)
+    # Los otros ingresos repartidos en todos los galones del mes.
+    other_per_gallon = (other_income / sold_total) if sold_total else 0.0
+    price_month = _ratio(sales_total + other_income, sold_total)
     # El margen del mes contra la última compra pesa cada día por sus galones.
     weighted = [(d["margin_last"], d["sold"]) for d in days if d["margin_last"] is not None and d["sold"]]
     margin_last_month = _ratio(sum(m * g for m, g in weighted), sum(g for _, g in weighted))
+    if margin_last_month is not None:
+        margin_last_month += other_per_gallon
     # Para explicar el margen con última compra (pedido del usuario,
     # 2026-11-03): qué factura se usó de costo y en cuántos días.
     last_costs = []
@@ -104,6 +116,8 @@ def build_control(year, month):
         entry["sales"] += d["fuel_sales"] or 0.0
     for entry in last_costs:
         entry["price"] = _ratio(entry["sales"], entry["sold"])
+        if entry["price"] is not None:
+            entry["price"] += other_per_gallon
         entry["margin"] = entry["price"] - entry["cost"] if entry["price"] is not None else None
 
     final_stock = days[-1]["stock"] if days else round(report["initial_gallons"] or 0.0, 2)
@@ -145,6 +159,8 @@ def build_control(year, month):
         "total_amount": report["total_amount"],
         "sold_gallons": round(sold_total, 2),
         "fuel_sales": round(sales_total, 2),
+        "other_income": other_income,
+        "other_per_gallon": other_per_gallon,
         "last_costs": last_costs,
         "final_stock": final_stock,
         # El valor del stock teórico al PPP, como el Inventario Final Teórico de Físico.

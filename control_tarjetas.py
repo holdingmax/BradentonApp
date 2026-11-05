@@ -337,3 +337,53 @@ def build_detail_by_day(year, month, card_sales, batches, covered_from, covered_
         "with_sales": len(with_sales),
         "ok": not any(r["status"] == "diff" for r in shown),
     }
+
+
+# ---------------------------------------------------------------------------
+# Reintegro del loyalty de Chevron (pedido del usuario, 2026-11-05). La
+# estación da el descuento en la bomba (Desc. Comb) y Chevron lo devuelve en
+# los batches "slri…" y de 7 dígitos, que J.H. deposita como cualquier cupón
+# pero que no son ventas de Store Info. En Ratio se registran una vez por mes
+# como el asiento 11768 de octubre 2026: DEBE 1.03.02 J.H. WILLIAMS -
+# RECAUDACION A LIQUIDAR / HABER 4.11.00.00 OTROS INGRESOS - LOYALTY CHEVRON,
+# por el Gross de los batches con fecha del mes ("INGRESOS LOYALTY CHEVRON
+# OCTUBRE", $2,225.87 = slri $2,192.95 + 7 dígitos $32.92).
+# ---------------------------------------------------------------------------
+LOYALTY_DEBIT_ACCOUNT = "1.03.02.00 - J.H. WILLIAMS - RECAUDACION A LIQUIDAR"
+LOYALTY_CREDIT_ACCOUNT = "4.11.00.00 - OTROS INGRESOS - LOYALTY CHEVRON"
+
+
+def loyalty_month(year, month, detail_groups):
+    """
+    Los batches del loyalty con fecha del mes, día por día, con su total
+    Gross (lo que va al asiento). `detail_groups`: eft_db.get_detail_groups().
+    `covered_to` es el último día con detalle de cupones cargado: si es antes
+    del fin de mes, el total todavía no está completo.
+    """
+    prefix = f"{year:04d}-{month:02d}"
+    days, covered_to = {}, None
+    for group in detail_groups:
+        for b in group["batches"]:
+            when = b["batch_date"]
+            if when and (covered_to is None or when > covered_to):
+                covered_to = when
+            if not (when or "").startswith(prefix) or in_store_info(b["batch"]):
+                continue
+            day = days.setdefault(when, {"date": when, "slri": 0.0, "other": 0.0, "count": 0, "gross": 0.0, "fees": 0.0, "net": 0.0})
+            kind = "slri" if (b["batch"] or "").lower().startswith("slri") else "other"
+            day[kind] += b["gross"] or 0.0
+            day["count"] += 1
+            for key in ("gross", "fees", "net"):
+                day[key] += b[key] or 0.0
+    rows = [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in days[d].items()} for d in sorted(days)]
+    month_end = date(year, month, calendar.monthrange(year, month)[1]).isoformat()
+    total = {key: round(sum(r[key] for r in rows), 2) for key in ("slri", "other", "gross", "fees", "net")}
+    return {
+        "rows": rows,
+        "total": total,
+        "count": sum(r["count"] for r in rows),
+        "covered_to": covered_to,
+        "complete": bool(covered_to and covered_to >= month_end),
+        "debit_account": LOYALTY_DEBIT_ACCOUNT,
+        "credit_account": LOYALTY_CREDIT_ACCOUNT,
+    }
