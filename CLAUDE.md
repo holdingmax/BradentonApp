@@ -9,7 +9,7 @@ Este archivo se carga solo en cada chat: tiene únicamente lo necesario para tra
 - Proyecto: app web Flask que reemplaza la carga manual en Excel de la contabilidad del negocio. Hoy **se usa casi solo "Carga de Datos"**: los datos quedan guardados en bases SQLite y se ven en la propia página, sin Excel de por medio.
 - Working directory: `C:\BradentonApp`. Windows 11. Debe correr también en Linux (Render/Docker).
 
-## Estado actual (2026-10-29)
+## Estado actual (2026-11-05)
 Solo lo vigente. El Estado actual largo de los chats 19 a 34 (con todos los pendientes de cada uno) está archivado al final de `HISTORIAL.md`, en **"Estado actual de CLAUDE.md archivado (2026-10-19)"**. Buscar ahí con Grep antes de retomar un tema viejo. Ratio, el grupo de WhatsApp y la bajada de facturas de los portales **no son del proyecto**: son skills personales de Alfonso (`~/.claude/skills/ratio-facturas` y `whatsapp-documentos`, con su `ESTADO.md`), que solo usan los lectores de esta app.
 
 - **Copias a Render hechas el 22/10** (memoria `project_render_data_migration`; detalle en HISTORIAL, "2026-10-22"): testing (`bradenton-dev-db`) y producción (`bradenton-db`, servicio `bradenton`), cada una con 52 tablas y 35.983 filas idénticas; salidas en `Claude outputs/Copia a Render ... 2026-10-22.txt`. La URL ya se sacó del `.env`.
@@ -17,11 +17,11 @@ Solo lo vigente. El Estado actual largo de los chats 19 a 34 (con todos los pend
   - **Flask lee el `.env` solo** (`app.run`): con una URL de Render en el `.env`, la app de la PC se conecta a Render. No levantarla mientras el `.env` tenga la URL (arreglo propuesto: `load_dotenv=False`).
   - Los datos se copian una sola vez y **nunca se reprocesan desde el Drive**: se perderían correcciones a mano, asignaciones de Kia/Toyota, marcas de Sale Tax, reglas editadas y pagos históricos.
 - **Entorno**: la PC se reseteó el 20/10 (usuario `Usuario`); rearmado el 21/10 con las mismas rutas (HISTORIAL, "2026-10-21"). Docker Desktop está instalado pero falta WSL2 (`wsl --install --no-distribution` como admin y reiniciar) para recrear `bradenton-pg`.
-- **Git**: todo pusheado a dev (3/11, chat Bradenton5).
+- **Git**: todo pusheado a dev (5/11, chat Bradenton6).
   - Sin commitear: `.claude/settings.json`.
   - `Claude outputs/` queda sin versionar: tiene PDFs con datos del negocio, borradores y los respaldos de Excel.
   - Alfonso pide cada commit y cada push (`git push origin main`).
-- **En dev, falta validar y pasar a producción** (detalle en HISTORIAL, "2026-10-23 a 26", "2026-10-26 a 29", "2026-11-02 a 03" y "2026-11-03: chat Bradenton5"). Antes de avisarle a Leti: `engineering:deploy-checklist`, `security-review` y `code-review` sobre `3402645..HEAD`.
+- **En dev, falta validar y pasar a producción** (detalle en HISTORIAL, "2026-10-23 a 26", "2026-10-26 a 29", "2026-11-02 a 03", "2026-11-03: chat Bradenton5" y "2026-11-05: chat Bradenton6"). Antes de avisarle a Leti: `engineering:deploy-checklist`, `security-review` y `code-review` sobre `3402645..HEAD`.
   - Los 4 pedidos del 26/10: Proyecciones, colores por sección, Control de combustible (`/controles/combustible`) y Ventas y Costos (`/controles/ventas-costos`).
   - Chat Bradenton3:
     - Proyecciones en `/proyecciones`, con gráficos y el botón "Panel de proyecciones" arriba.
@@ -32,6 +32,7 @@ Solo lo vigente. El Estado actual largo de los chats 19 a 34 (con todos los pend
   - Chat Bradenton4: Proyecciones con la utilidad neta proyectada y su desglose (`/proyecciones/utilidad-neta`, `proyecciones_neta.py`), Lottery con la comisión real de las semanas del mes, la torta por rubro del C-Store y sin los gráficos día por día ni mes a mes.
   - Chat Bradenton5: Control de Tarjetas para la conciliación (pedido de Leti): sin cuadros de aviso ni "En camino"/"Atrasado", sin la tabla "Por día de venta", con "Pendiente de acreditar" (vendido sin DDC, con los DDC del mes siguiente) y "DDC sin aplicar en un EFT", desplegables. La botonera muestra lo mismo, y "Portales" pasó a "Servicios". Control de combustible como la hoja Fisico del Cierre (inicial, facturas, Total Compras, Ventas al PPP, Final Teórico, Real y Diferencia teórico − real), con el inicial editable ahí mismo, el valor del stock al PPP, los precios por galón que explican su cuenta, y sin el día por día ni las facturas contra EFT. Físico salió de la barra lateral.
   - **Bce en producción**: para la columna "Real (Bce)" del desglose y el "Control contra el Balance", un admin sube una vez `Bce Brandenton 30-09-26.xlsx` (con los renglones nuevos del Estado de Resultado).
+  - Chat Bradenton6: Tarjetas más prolijo y sin "Cupones del mes". Combustible: primer cuadro en galones y $ (sin Medición ni "cargado a mano"); el inventario final real sale de la foto del ticket (se endereza, se parte en un reporte por foto y se lee; migraciones 0024 a 0026), se guarda por tanque (T1 + T2 al pasar por encima y al editar) y se corrige a mano. Falta probar en bradenton-dev la subida del Resumen de septiembre y cuánto tarda el OCR en Render.
   - Físico todavía compara la medición contra el fin de mes (ajuste chico ofrecido).
 - **Hoja PAGO del Cierre: de vuelta al cuadro único** (3/11). El importador de la app lee los dos formatos. Lo que quedó abierto de Bradenton4 (fórmulas del PAGO, los ~$11.024, inicial de Físico, Lottery de septiembre) Alfonso lo descartó el 3/11.
 - **Septiembre (revisado el 26/10 con los datos al 22/10)**: completo salvo el recibo del depósito de $2,550 (25/09), 8 movimientos de Chase sin categoría, Flori-Gas 1734258 (24/09, ni en Caja ni en Proveedores), Colonial 2104446 y 2109869, King's 212214, Brandon Liu 335 y Sale Tax sin marcar.
@@ -83,7 +84,7 @@ Solo lo vigente. El Estado actual largo de los chats 19 a 34 (con todos los pend
 - **`webapp.py`**: toda la app Flask (rutas, login, jobs). Las rutas son pegamento: la lógica de negocio vive en los módulos de dominio.
 - **Patrón por módulo**: `modulo.py` (lectura/extracción/cálculo, sin UI) + `modulo_db.py` (conexión por `db.py`: SQLite en `reportes_data/` en la PC, o el esquema del mismo nombre de PostgreSQL con `DATABASE_URL`; las tablas de Postgres las crean las migraciones de `migraciones/`) + templates en `templates/` (63; `base.html` es el layout compartido: barra lateral, header, popovers, avisos, barra de progreso).
 - **Base de datos** (pase a PostgreSQL, chat 34; plan en `PLAN_POSTGRES.md`).
-  - **Con o sin `DATABASE_URL`**: sin ella, el SQLite de siempre (la PC: la app no lee el `.env`). Con ella, Postgres con un esquema por base y las migraciones de Alembic (`migraciones/`, 0001 a 0024), que la app aplica sola al arrancar.
+  - **Con o sin `DATABASE_URL`**: sin ella, el SQLite de siempre (la PC: la app no lee el `.env`). Con ella, Postgres con un esquema por base y las migraciones de Alembic (`migraciones/`, 0001 a 0026), que la app aplica sola al arrancar.
   - **Dónde va cada cosa**: la configuración (usuarios, clave de sesión, reglas, límite de Caja, Sale Tax) por `config_store.py`, esquema `config`. Los archivos de datos por `app_paths.DATA_DIR` / `app_paths.config_file(...)`, nunca la carpeta del código.
   - **Para cualquier cambio de base**:
     - Conexión con `db.connect(esquema, ruta_sqlite, init_sqlite)`.

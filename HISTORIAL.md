@@ -2825,3 +2825,17 @@ Texto completo, sin cambios, de la sección "Estado actual" de `CLAUDE.md` hasta
   - Salieron el cuadro "Facturas contra EFT" y la tabla de facturas contra los EFT (y su cálculo, `_invoices_vs_eft`).
   - Físico salió de la barra lateral; la página sigue y se abre desde Carga de Datos → Combustible.
 - **Cuadros flotantes y Físico más prolijo**: el desglose de un número (precios por galón y editar el inicial en Combustible; los dos pendientes de Tarjetas) se abre con el popover genérico de `base.html` (`.popover-trigger`/`.popover-panel`), que flota sin mover la página. El cuadro Físico tiene secciones ("Compras del mes", "Cierre del mes"), el concepto primero, Final Teórico resaltado, Ventas en rojo, el % de la diferencia en una etiqueta y el PPP del mes arriba. Los "Ver …" de los reportes de J.H. siguen como `<details>`.
+
+## 2026-11-05: chat Bradenton6 (Tarjetas y Combustible para Leti; fotos del inventario)
+- **Tarjetas** (f834681): los pendientes en tarjetas (`.tc-tile`), la tabla por día con columnas fijas y sin la sección "Cupones del mes".
+- **Combustible, primera vuelta** (864bd3e): sin el cuadro Medición; el cuadro Galones muestra el inventario final real y la diferencia teórico − real con su %; la hoja Físico con títulos Galones / $; fotos del inventario final (tabla `fisico_photos`, migración 0024: la imagen va en la base porque en Render el disco no persiste).
+- **Lector de las fotos** (`fisico_fotos.py`, 909fe77 y ad37f9c):
+  - Endereza probando rotaciones y puntuando palabras del ticket (la OSD sola erraba 180° en el Resumen escaneado), recorta al ticket y lo parte en un reporte por foto en cada encabezado "SHELL".
+  - Lee VOLUME/ULLAGE de los dos tanques con 16 variantes de imagen que votan; un volumen vale si VOLUME + ULLAGE da la capacidad (T1 14.165, T2 6.057) y lo dan al menos dos lecturas. Corrige 6/4/3/9/0 → 8 y un dígito de más adelante.
+  - Del Resumen de Ventas entero quedan solo las hojas del ticket. Tiempos en la PC: el Resumen de septiembre, ~60 s; una foto, ~20 s.
+  - Septiembre: 01/10 6 AM, 8.655 + 2.081 = 10.736 gal. Agosto: 01/08 6.699; 01/09 9.259.
+  - La carga (job `fisico_fotos`) toma el inventario final real de la foto del último día del mes o del 1° del siguiente y **pisa** lo cargado (la foto es lo que lo confirma); si está mal se corrige a mano. Una foto de otra fecha avisa y no se toma.
+- **Por tanque** (2d452d6, migración 0025): `fisico_months.real_regular_gallons` / `real_premium_gallons`; al pasar por encima del real se ve T1 + T2, y al editar se cargan los dos con la suma en vivo (el total es la suma). Sin "Controles" repetido en la barra de arriba.
+- **Primer cuadro en galones y $** (b6de53a): vendido, final y diferencia al PPP como la hoja; sin el título "Galones" ni "cargado a mano en Físico". El inicial ya se encadenaba del final teórico del mes anterior (un inicial cargado a mano manda; octubre arranca con 21.664,35 gal de septiembre en la PC).
+- **T1 y T2 desde la foto** (migración 0026): cada foto guarda lo leído (`read_at`, `reading_date`, `reading_regular`, `reading_premium`); al editar el real, T1 y T2 vienen de lo guardado o de la foto del cierre, con la línea "La foto del dd/mm leyó …". Las fotos subidas antes se leen solas en segundo plano la primera vez que se abre el control (`_fisico_backfill_readings`).
+- Sin probar: las migraciones 0024 a 0026 en Postgres (Docker sin WSL2) y el OCR en Render.
