@@ -2839,3 +2839,17 @@ Texto completo, sin cambios, de la sección "Estado actual" de `CLAUDE.md` hasta
 - **Primer cuadro en galones y $** (b6de53a): vendido, final y diferencia al PPP como la hoja; sin el título "Galones" ni "cargado a mano en Físico". El inicial ya se encadenaba del final teórico del mes anterior (un inicial cargado a mano manda; octubre arranca con 21.664,35 gal de septiembre en la PC).
 - **T1 y T2 desde la foto** (migración 0026): cada foto guarda lo leído (`read_at`, `reading_date`, `reading_regular`, `reading_premium`); al editar el real, T1 y T2 vienen de lo guardado o de la foto del cierre, con la línea "La foto del dd/mm leyó …". Las fotos subidas antes se leen solas en segundo plano la primera vez que se abre el control (`_fisico_backfill_readings`).
 - Sin probar: las migraciones 0024 a 0026 en Postgres (Docker sin WSL2) y el OCR en Render.
+
+## 2026-11-05: chat Bradenton7 (Tarjetas para la conciliación de 1.03.02; loyalty de Chevron; precio por galón como el Bce)
+- **Lo que se vio en Ratio y en el Bce** (Libro Diario y Mayor, solo lectura):
+  - La jefa de Alfonso creó **4.11.00.00 OTROS INGRESOS - LOYALTY CHEVRON**. Asientos: **11765** (30/09, CandelaM) DEBE 1.03.02 / HABER 4.11 por 6,569.41 "INGRESOS LOYALTY CHEVRON (JULIO-AGOSTO-SEPTIEMBRE)"; **11768** (31/10, garmendiaa) por 2,225.87 "INGRESOS LOYALTY CHEVRON OCTUBRE" (= slri 2,192.95 + 7 dígitos 32.92, Gross).
+  - **4.07 OTROS INGRESOS COMBUSTIBLE** (id 511375) tiene solo los REBATE GETTEL de cada mes (jul 557.34, ago 604.48, sep 755.16) y un monto extra de $180 en agosto (11327).
+  - **Bce, BALANCE HISTORICO**: Precio Venta (fila 125) = (4.01 Ventas de Combustible + 4.07) ÷ galones vendidos (filas 77/124); septiembre (175,365.42 + 755.16) ÷ 41,541.65 = 4.2396. La hoja Combust no usa los otros ingresos.
+- **Tarjetas y Cupones** (3b89fde y b1fe805):
+  - Salieron el título y el texto de "Reportes mensuales de J.H.", "Facturas del mes", el cuadro "DDC sin aplicar en un EFT" y la tabla por día. Queda "EFT del mes".
+  - Un solo cuadro **Pendiente de acreditar** = vendido sin DDC + DDC sin aplicar (Gross). Lo vendido sin DDC sale de los DDC del mes siguiente que trajeron esas ventas cuando ya llegaron todos (`_tarjetas_month`): traen también los slri de esos días. Al 30/09: 22,948.44 + 6,348.23 = **29,296.67 = 1.03.02 en Ratio** (con Store Info daba 22,807.86 y no cerraba por 140.58).
+  - Al tocarlo se abre abajo el detalle (DDC del mes siguiente y DDC sin aplicar, que en el Excel de Aplicación quedan sin pintar) y **Exportar PDF** (`/controles/tarjetas/pendiente/pdf`, una hoja con membrete, baja a las descargas).
+  - Cuadro **Ingresos loyalty Chevron** (`control_tarjetas.loyalty_month`): Gross de los batches slri y de 7 dígitos con fecha del mes, día por día, con el asiento armado. Agosto 1,639.00 y septiembre 2,873.06, como la skill. Avisa si el detalle de cupones no llega al fin de mes.
+  - Los dos detalles se abren abajo sin mover la pantalla y abrir uno cierra el otro.
+- **Combustible** (3b89fde): `control_combustible.build_control(year, month, other_income)` suma el REBATE GETTEL del mes (`cuenta_kia_toyota.month_closing`) al precio de venta, a los dos márgenes y al precio de cada tramo del margen con última compra.
+- **Abierto**: el REBATE GETTEL de septiembre da 636.32 en la app (con la base de la PC al 22/10) contra 755.16 en Ratio; por eso el precio da 4.2368 y no 4.2396.
