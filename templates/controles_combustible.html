@@ -164,7 +164,13 @@
           <td>Total Compras</td><td></td><td></td>
           <td>{{ gal(s.total_gallons) }}</td><td>{{ money(s.total_amount) }}</td><td>{{ money(c.ppp) }}</td>
         </tr>
-        <tr class="cb-sheet-gap"><td colspan="6"></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="historial-table-wrap cb-sheet-next">
+    <table class="historial-table cb-sheet">
+      <colgroup><col><col class="cb-col-date"><col class="cb-col-date"><col class="cb-col-num"><col class="cb-col-num"><col class="cb-col-num"></colgroup>
+      <tbody>
         <tr class="cb-sheet-section"><th>Cierre del mes</th><th></th><th></th><th>Galones</th><th>Importe</th><th>Precio por galón</th></tr>
         <tr class="cb-sheet-sales">
           <td>Ventas <span class="cb-note">{{ gal(-s.ventas_gallons) }} gal × PPP</span></td><td></td><td></td>
@@ -207,7 +213,7 @@
     <div class="cb-photo">
       <button type="button" class="popover-trigger cb-photo-thumb" data-popover-target="cb-pop-photo-{{ p.id }}"><img src="{{ url_for('fisico_foto', photo_id=p.id) }}" alt="Foto del inventario {{ loop.index }}" loading="lazy"></button>
       <div class="popover-panel cb-pop-photo" id="cb-pop-photo-{{ p.id }}"><img src="{{ url_for('fisico_foto', photo_id=p.id) }}" alt="Foto del inventario {{ loop.index }}"></div>
-      <form method="post" action="{{ url_for('fisico_foto_eliminar', photo_id=p.id) }}" onsubmit="return confirm('¿Borrar esta foto?');">
+      <form method="post" action="{{ url_for('fisico_foto_eliminar', photo_id=p.id) }}">
         <button type="submit" class="cb-link cb-photo-del">Borrar</button>
       </form>
     </div>
@@ -222,7 +228,7 @@
     <input type="file" name="fotos" accept="image/*,application/pdf" multiple required>
     <button type="submit" class="btn-accent">Subir fotos</button>
   </form>
-  <p class="cb-foot">Fotos o PDF del ticket "Inventory Report" de los tanques (sirve el Resumen de Ventas entero: queda solo la hoja del ticket). Se enderezan y, si el mes no tiene el inventario final real, se toma de la foto. Tocá una foto para verla grande.</p>
+  <p class="cb-foot">Fotos o PDF del ticket "Inventory Report" de los tanques (sirve el Resumen de Ventas entero: queda solo la hoja del ticket). Se enderezan, cada reporte del ticket queda en su foto y el inventario final real se toma de la foto del cierre. Si está mal, se corrige en Editar inventario final real. Tocá una foto para verla grande.</p>
 </div>
 </div>
 
@@ -252,8 +258,9 @@
   .cb-sheet tbody tr:last-child td { border-bottom: 0; }
   .cb-sheet tbody tr.cb-sheet-section th { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-soft); background: var(--surface-alt); white-space: nowrap; }
   .cb-sheet tbody tr.cb-sheet-section th:first-child { font-size: 13px; font-weight: 700; color: var(--accent); }
-  .cb-sheet tbody tr.cb-sheet-gap td { height: 18px; padding: 0; border-bottom: 0; background: var(--surface); }
-  .cb-sheet-total td { font-weight: 700; border-top: 2px solid var(--border); }
+  .cb-sheet-next { margin-top: 22px; }
+  .cb-sheet { table-layout: fixed; min-width: 640px; }
+  .cb-sheet-total td { font-weight: 700; border-top: 2px solid var(--border); background: var(--accent-soft); }
   .cb-sheet-sales td { color: var(--error); }
   .cb-sheet-sales td:first-child { font-weight: 600; }
   .cb-sheet-final td { font-weight: 700; background: var(--accent-soft); }
@@ -276,7 +283,7 @@
   button.cb-photo-thumb { display: block; width: 100%; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-alt); }
   .cb-photo-thumb img { display: block; width: 100%; height: 190px; object-fit: cover; object-position: top; }
   .cb-pop-photo { padding: 6px; }
-  .cb-pop-photo img { display: block; max-height: 82vh; max-width: min(560px, calc(100vw - 32px)); }
+  .cb-pop-photo img { display: block; height: 86vh; width: auto; max-width: calc(100vw - 32px); object-fit: contain; }
   button.cb-photo-del { font-size: 12px; font-weight: 400; }
   .cb-photo-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
   .cb-photo-form input[type=file] { max-width: 100%; font-size: 12.5px; }

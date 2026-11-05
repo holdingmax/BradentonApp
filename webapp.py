@@ -2213,30 +2213,40 @@ def fisico_fotos_subir():
     return jsonify({"job_id": job_id, "total": len(paths)})
 
 
-def _fisico_reading_notice(year, month, reading):
+def _fisico_take_reading(year, month, readings):
     """
-    Guarda el inventario final real leído de una foto si el mes no tenía uno.
-    Devuelve (qué pasó, aviso): "saved", "same" o "skipped".
+    El inventario final real del mes sale de la foto del cierre (pedido del
+    usuario, 2026-11-05: la foto es lo que lo confirma; si se lee mal, se
+    corrige a mano). De las lecturas de la carga se toma la del último día del
+    mes o del 1° del siguiente, la más tardía; una sin fecha legible vale solo
+    si no hay otra. Devuelve (salió bien, aviso) o None si no hubo lecturas.
     """
+    if not readings:
+        return None
+    month_end = date(year, month, calendar.monthrange(year, month)[1])
+    dated = [r for r in readings if r["date"] is not None]
+    closing = [r for r in dated if r["date"].date() in (month_end, month_end + timedelta(days=1))]
+    if closing:
+        reading = max(closing, key=lambda r: r["date"])
+    elif not dated:
+        reading = readings[-1]
+    else:
+        other = max(dated, key=lambda r: r["date"])
+        return False, f"La foto es del {other['date']:%d/%m/%Y}, no del cierre de {_MONTH_NAMES_ES[month - 1].lower()}: no se tomó su inventario."
     when = reading["date"]
     detail = f"{reading['gallons']:,.0f} gal (Regular {reading['tanks'][1]:,.0f} + Premium {reading['tanks'][2]:,.0f})"
-    if when is not None:
-        month_end = date(year, month, calendar.monthrange(year, month)[1])
-        if when.date() not in (month_end, month_end + timedelta(days=1)):
-            return "skipped", f"La foto es del {when:%d/%m/%Y}, no del cierre de este mes: no se tomó su inventario de {detail}."
-    current = (fisico_db.get_month_settings(year, month) or {}).get("real_ending_gallons")
-    if current is None:
-        fisico_db.set_month_real_ending(year, month, float(reading["gallons"]), when.date() if when else None)
-        return "saved", f"Inventario final real leído de la foto: {detail}" + (f", medido el {when:%d/%m}." if when else ".")
-    if abs(current - reading["gallons"]) < 0.5:
-        return "same", f"La foto coincide con el inventario final real cargado: {detail}."
-    return "skipped", f"La foto dice {detail}, pero el inventario final real cargado es {current:,.2f} gal: no se cambió."
+    previous = (fisico_db.get_month_settings(year, month) or {}).get("real_ending_gallons")
+    fisico_db.set_month_real_ending(year, month, float(reading["gallons"]), when.date() if when else None)
+    text = f"Inventario final real tomado de la foto: {detail}" + (f", medido el {when:%d/%m}." if when else ".")
+    if previous is not None and abs(previous - reading["gallons"]) >= 0.5:
+        text += f" Antes estaba cargado {previous:,.2f} gal."
+    return True, text
 
 
 def _run_fisico_fotos_job(job_id, paths, year, month):
     """Corre en su propio hilo, mismo patrón que _run_carga_datos_combustible_job: cada archivo aislado."""
     try:
-        saved, failed, notes = 0, 0, []
+        saved, failed, readings = 0, 0, []
         for index, path in enumerate(paths, start=1):
             try:
                 photos = fisico_fotos.process_file(path)
@@ -2252,7 +2262,7 @@ def _run_fisico_fotos_job(job_id, paths, year, month):
                 fisico_db.add_photo(year, month, os.path.basename(path), "image/jpeg", buffer.getvalue())
                 saved += 1
                 if photo["reading"]:
-                    notes.append(_fisico_reading_notice(year, month, photo["reading"]))
+                    readings.append(photo["reading"])
             if not photos:
                 failed += 1
             jobs.update_job(job_id, done=index, total=len(paths))
@@ -2260,16 +2270,14 @@ def _run_fisico_fotos_job(job_id, paths, year, month):
         parts = []
         if saved:
             parts.append(f"Se guardó {saved} foto." if saved == 1 else f"Se guardaron {saved} fotos.")
-            if not notes:
-                parts.append("No se pudo leer el inventario: cargalo a mano.")
-        # La segunda foto del mismo ticket solo confirmaría lo que se acaba de tomar.
-        if any(kind == "saved" for kind, _ in notes):
-            notes = [n for n in notes if n[0] != "same"]
-        parts += list(dict.fromkeys(text for _, text in notes))
+        taken = _fisico_take_reading(year, month, readings) if saved else None
+        if taken:
+            parts.append(taken[1])
+        elif saved:
+            parts.append("No se pudo leer el inventario: cargalo a mano en Editar inventario final real.")
         if failed:
             parts.append(("Un archivo no" if failed == 1 else f"{failed} archivos no") + " tenía el ticket del inventario o no se pudo leer.")
-        all_ok = notes and not failed and all(kind != "skipped" for kind, _ in notes)
-        level = "error" if not saved else ("success" if all_ok else "warning")
+        level = "error" if not saved else ("success" if taken and taken[0] and not failed else "warning")
         jobs.update_job(
             job_id, status="done", done=len(paths), total=len(paths),
             notice=" ".join(parts), notice_level=level,

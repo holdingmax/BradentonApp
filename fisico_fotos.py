@@ -221,20 +221,47 @@ def images_from_file(path):
     return [ImageOps.exif_transpose(image).convert("RGB")]
 
 
+def split_reports(image):
+    """
+    Un recorte por reporte: el ticket del cierre trae dos seguidos (el del
+    último día a la noche y el del 1° a la mañana) y cada uno se ve por
+    separado, en grande (pedido del usuario, 2026-11-05). Corta arriba de
+    cada "SHELL" del encabezado; con uno solo, devuelve el ticket entero.
+    """
+    ocr_utils.ensure_pytesseract()
+    data = ocr_utils.pytesseract.image_to_data(image, config="--psm 6", output_type=ocr_utils.pytesseract.Output.DICT)
+    lines = {}
+    for i, word in enumerate(data["text"]):
+        if word.strip():
+            key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
+            line = lines.setdefault(key, {"words": [], "top": data["top"][i], "bottom": 0})
+            line["words"].append(word.strip().upper())
+            line["top"] = min(line["top"], data["top"][i])
+            line["bottom"] = max(line["bottom"], data["top"][i] + data["height"][i])
+    ordered = sorted(lines.values(), key=lambda line: line["top"])
+    starts = [i for i, line in enumerate(ordered) if difflib.get_close_matches("SHELL", line["words"][:1], n=1, cutoff=0.7)]
+    if len(starts) < 2:
+        return [image]
+    cuts = [0] + [(ordered[i - 1]["bottom"] + ordered[i]["top"]) // 2 for i in starts[1:] if i > 0] + [image.height]
+    pieces = [image.crop((0, top, image.width, bottom)) for top, bottom in zip(cuts, cuts[1:]) if bottom - top > image.height * 0.15]
+    return [crop_to_ticket(piece) for piece in pieces] or [image]
+
+
 def process_file(path):
     """
-    Las fotos de inventario de un archivo, derechas y recortadas, con su
-    lectura: [{"image": PIL, "reading": dict o None}]. De un PDF de varias
-    páginas (el Resumen de Ventas entero) quedan solo las del ticket; una foto
-    suelta queda siempre, aunque no se reconozca.
+    Las fotos de inventario de un archivo, derechas, recortadas y con un
+    reporte cada una, con su lectura: [{"image": PIL, "reading": dict o None}].
+    De un PDF de varias páginas (el Resumen de Ventas entero) quedan solo las
+    del ticket; una foto suelta queda siempre, aunque no se reconozca.
     """
     images = images_from_file(path)
     photos = []
     for image in images:
         straight, is_ticket = straighten(image)
-        if not is_ticket and len(images) > 1:
+        if not is_ticket:
+            if len(images) == 1:
+                photos.append({"image": straight, "reading": None})
             continue
-        if is_ticket:
-            straight = crop_to_ticket(straight)
-        photos.append({"image": straight, "reading": read_inventory(straight) if is_ticket else None})
+        for piece in split_reports(crop_to_ticket(straight)):
+            photos.append({"image": piece, "reading": read_inventory(piece)})
     return photos
