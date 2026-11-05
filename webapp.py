@@ -149,6 +149,7 @@ import proyecciones
 import proyecciones_neta
 import fisico
 import fisico_db
+import fisico_fotos
 import fisico_invoice_parser
 import reportes_db
 import lottery_db
@@ -2192,60 +2193,90 @@ def fisico_lectura_real():
 _FISICO_PHOTO_MAX_SIDE = 1800
 
 
-def _fisico_photo_images(upload):
-    """
-    Las imágenes de un archivo subido a Fotos del inventario final: una foto
-    o cada página de un PDF (los que llegan por WhatsApp). ValueError si no
-    es ninguna de las dos cosas.
-    """
-    from PIL import Image, ImageOps
-
-    raw = upload.read()
-    if raw[:5] == b"%PDF-":
-        import pdfplumber
-
-        with pdfplumber.open(io.BytesIO(raw)) as pdf:
-            return [ocr_utils.render_page(page, 150) for page in pdf.pages]
-    try:
-        image = Image.open(io.BytesIO(raw))
-        image.load()
-    except Exception:
-        raise ValueError("no es una foto ni un PDF")
-    return [ImageOps.exif_transpose(image).convert("RGB")]
-
-
 @app.route("/fisico/fotos", methods=["POST"])
 def fisico_fotos_subir():
     """
     Fotos del inventario final del mes (pedido del usuario, 2026-11-05): los
     tickets de los tanques, como las imágenes pegadas al lado de la hoja
-    Fisico. Se guardan achicadas en JPEG, cada archivo por separado.
+    Fisico. Se enderezan, se recortan y se intenta leer el volumen
+    (fisico_fotos.py); en segundo plano porque un Resumen de Ventas entero
+    tarda casi un minuto.
     """
     year = request.form.get("year", type=int)
     month = request.form.get("month", type=int)
     uploads = [f for f in request.files.getlist("fotos") if f and f.filename]
     if not (year and month and 1 <= month <= 12) or not uploads:
-        flash("Elegí al menos una foto.", "error")
-        return redirect(url_for("controles_combustible", year=year, month=month))
-    saved, failed = 0, 0
-    for upload in uploads:
-        name = os.path.basename(upload.filename)
-        try:
-            images = _fisico_photo_images(upload)
-        except Exception:
-            failed += 1
-            continue
-        for image in images:
-            image.thumbnail((_FISICO_PHOTO_MAX_SIDE, _FISICO_PHOTO_MAX_SIDE))
-            buffer = io.BytesIO()
-            image.save(buffer, "JPEG", quality=85, optimize=True)
-            fisico_db.add_photo(year, month, name, "image/jpeg", buffer.getvalue())
-            saved += 1
-    if saved:
-        flash(f"Se guardaron {saved} foto{'s' if saved != 1 else ''}.", "success")
-    if failed:
-        flash(("Un archivo no se pudo leer" if failed == 1 else f"{failed} archivos no se pudieron leer") + ": tiene que ser una foto o un PDF.", "error")
-    return redirect(url_for("controles_combustible", year=year, month=month))
+        return _error_response("Elegí al menos una foto.")
+    paths = _save_uploads_to_workspace(uploads)
+    job_id = jobs.create_job(len(paths), kind="fisico_fotos")
+    threading.Thread(target=_run_fisico_fotos_job, args=(job_id, paths, year, month), daemon=True).start()
+    return jsonify({"job_id": job_id, "total": len(paths)})
+
+
+def _fisico_reading_notice(year, month, reading):
+    """
+    Guarda el inventario final real leído de una foto si el mes no tenía uno.
+    Devuelve (qué pasó, aviso): "saved", "same" o "skipped".
+    """
+    when = reading["date"]
+    detail = f"{reading['gallons']:,.0f} gal (Regular {reading['tanks'][1]:,.0f} + Premium {reading['tanks'][2]:,.0f})"
+    if when is not None:
+        month_end = date(year, month, calendar.monthrange(year, month)[1])
+        if when.date() not in (month_end, month_end + timedelta(days=1)):
+            return "skipped", f"La foto es del {when:%d/%m/%Y}, no del cierre de este mes: no se tomó su inventario de {detail}."
+    current = (fisico_db.get_month_settings(year, month) or {}).get("real_ending_gallons")
+    if current is None:
+        fisico_db.set_month_real_ending(year, month, float(reading["gallons"]), when.date() if when else None)
+        return "saved", f"Inventario final real leído de la foto: {detail}" + (f", medido el {when:%d/%m}." if when else ".")
+    if abs(current - reading["gallons"]) < 0.5:
+        return "same", f"La foto coincide con el inventario final real cargado: {detail}."
+    return "skipped", f"La foto dice {detail}, pero el inventario final real cargado es {current:,.2f} gal: no se cambió."
+
+
+def _run_fisico_fotos_job(job_id, paths, year, month):
+    """Corre en su propio hilo, mismo patrón que _run_carga_datos_combustible_job: cada archivo aislado."""
+    try:
+        saved, failed, notes = 0, 0, []
+        for index, path in enumerate(paths, start=1):
+            try:
+                photos = fisico_fotos.process_file(path)
+            except Exception:
+                failed += 1
+                jobs.update_job(job_id, done=index, total=len(paths))
+                continue
+            for photo in photos:
+                image = photo["image"]
+                image.thumbnail((_FISICO_PHOTO_MAX_SIDE, _FISICO_PHOTO_MAX_SIDE))
+                buffer = io.BytesIO()
+                image.save(buffer, "JPEG", quality=85, optimize=True)
+                fisico_db.add_photo(year, month, os.path.basename(path), "image/jpeg", buffer.getvalue())
+                saved += 1
+                if photo["reading"]:
+                    notes.append(_fisico_reading_notice(year, month, photo["reading"]))
+            if not photos:
+                failed += 1
+            jobs.update_job(job_id, done=index, total=len(paths))
+
+        parts = []
+        if saved:
+            parts.append(f"Se guardó {saved} foto." if saved == 1 else f"Se guardaron {saved} fotos.")
+            if not notes:
+                parts.append("No se pudo leer el inventario: cargalo a mano.")
+        # La segunda foto del mismo ticket solo confirmaría lo que se acaba de tomar.
+        if any(kind == "saved" for kind, _ in notes):
+            notes = [n for n in notes if n[0] != "same"]
+        parts += list(dict.fromkeys(text for _, text in notes))
+        if failed:
+            parts.append(("Un archivo no" if failed == 1 else f"{failed} archivos no") + " tenía el ticket del inventario o no se pudo leer.")
+        all_ok = notes and not failed and all(kind != "skipped" for kind, _ in notes)
+        level = "error" if not saved else ("success" if all_ok else "warning")
+        jobs.update_job(
+            job_id, status="done", done=len(paths), total=len(paths),
+            notice=" ".join(parts), notice_level=level,
+            redirect_url=f"/controles/combustible?year={year}&month={month}" if saved else None,
+        )
+    except Exception as exc:
+        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
 
 
 @app.route("/fisico/fotos/<int:photo_id>")
@@ -7474,10 +7505,12 @@ def controles_combustible():
     Cálculo en control_combustible.py.
     """
     year, month = _cierre_month()
+    _active_job = jobs.get_active_job("fisico_fotos")
     return render_template(
         "controles_combustible.html",
         control=control_combustible.build_control(year, month),
         photos=fisico_db.get_month_photos(year, month),
+        resume_job_id=(_active_job["id"] if _active_job else None),
         **_month_nav(year, month),
         accent="#92400E",
         accent_soft="#FDE8CE",
