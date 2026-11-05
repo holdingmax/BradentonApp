@@ -61,18 +61,29 @@
   .tc-pend-detail h3 { margin: 18px 0 0; font-size: 15px; }
   .tc-pend-detail .tc-table { min-width: 640px; }
   .tc-pend-detail .tc-table td.tc-left, .tc-pend-detail .tc-table th.tc-left { text-align: left; }
+  .tc-loy-detail .tc-table th:last-child, .tc-loy-detail .tc-table td:last-child { text-align: right; }
+  .tc-loy-detail .tc-table tfoot td[colspan] { text-align: left; }
   .tc-pend-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 18px; padding: 12px 16px; border-radius: 10px; background: var(--accent-soft); font-size: 14px; }
   .tc-pend-foot .btn-accent { text-decoration: none; margin: 0; }
 </style>
 <script>
-  // El detalle del pendiente aparece al tocar el monto (pedido del usuario, 2026-11-05).
+  // El detalle del pendiente y el del loyalty aparecen al tocar su monto, sin
+  // mover la pantalla; abrir uno cierra el otro (pedido del usuario, 2026-11-05).
   document.addEventListener('DOMContentLoaded', function () {
-    var button = document.getElementById('tc-pend-toggle'), panel = document.getElementById('tc-pend-detail');
-    if (!button || !panel) return;
-    button.addEventListener('click', function () {
-      panel.hidden = !panel.hidden;
-      button.setAttribute('aria-expanded', String(!panel.hidden));
-      if (!panel.hidden) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('.tc-detail-toggle'));
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var panel = document.getElementById(button.getAttribute('aria-controls'));
+        if (!panel) return;
+        var open = panel.hidden;
+        buttons.forEach(function (other) {
+          var otherPanel = document.getElementById(other.getAttribute('aria-controls'));
+          if (otherPanel) otherPanel.hidden = true;
+          other.setAttribute('aria-expanded', 'false');
+        });
+        panel.hidden = !open;
+        button.setAttribute('aria-expanded', String(open));
+      });
     });
   });
 </script>
@@ -108,49 +119,50 @@
   <div class="tc-pending">
     <div class="tc-tile">
       <div class="tc-tile-label">Pendiente de acreditar al {{ pending_until.strftime('%d/%m') }}</div>
-      <div class="tc-tile-amount"><button type="button" class="tc-link" id="tc-pend-toggle" aria-expanded="false" aria-controls="tc-pend-detail">{{ money(pending_total) }}</button></div>
-      <div class="tc-tile-sub">{% if last %}Vendido sin DDC {{ money(last.pending) }} + {% endif %}DDC sin aplicar {{ money(pending_ddc_totals.gross) }}</div>
+      <div class="tc-tile-amount"><button type="button" class="tc-link tc-detail-toggle" aria-expanded="false" aria-controls="tc-pend-detail">{{ money(pending_total) }}</button></div>
+      <div class="tc-tile-sub">{% if last %}Vendido sin DDC {{ money(sales_pending) }} + {% endif %}DDC sin aplicar {{ money(pending_ddc_totals.gross) }}</div>
     </div>
     {# El reintegro del loyalty de Chevron del mes, como el asiento de Ratio (pedido del usuario, 2026-11-05). #}
     {% set ly = loyalty %}
     <div class="tc-tile">
       <div class="tc-tile-label">Ingresos loyalty Chevron de {{ month_name|lower }}</div>
-      <div class="tc-tile-amount"><button type="button" class="popover-trigger tc-link" data-popover-target="tc-pop-loyalty">{{ money(ly.total.gross) }}</button></div>
+      <div class="tc-tile-amount"><button type="button" class="tc-link tc-detail-toggle" aria-expanded="false" aria-controls="tc-loy-detail">{{ money(ly.total.gross) }}</button></div>
       <div class="tc-tile-sub">{% if ly.rows %}{{ ly.count }} batches slri y de 7 dígitos, Gross{% if not ly.complete %} · <span class="tc-diff">detalle de cupones hasta el {{ ddmm(ly.covered_to) if ly.covered_to else '—' }}</span>{% endif %}{% else %}Sin detalle de cupones del mes{% endif %}</div>
-      <div class="popover-panel tc-pop" id="tc-pop-loyalty">
-        <div class="tc-pop-title">Ingresos loyalty Chevron de {{ month_name|lower }} {{ year }}</div>
-        <p class="tc-note" style="margin-top:0">Chevron devuelve el descuento de combustible que se da en la bomba (Desc. Comb) en los batches "slri…" y de 7 dígitos de los cupones de J.H. No son ventas de Store Info: se registran una vez por mes.</p>
-        <div class="tc-table-wrap">
-          <table class="tc-table">
-            <thead><tr><th class="tc-left">Cuenta</th><th>Debe</th><th>Haber</th></tr></thead>
-            <tbody>
-              <tr><td class="tc-left">{{ ly.debit_account }}</td><td>{{ money(ly.total.gross) }}</td><td></td></tr>
-              <tr><td class="tc-left">{{ ly.credit_account }}</td><td></td><td>{{ money(ly.total.gross) }}</td></tr>
-            </tbody>
-            <tfoot><tr><td class="tc-left" colspan="3">INGRESOS LOYALTY CHEVRON {{ month_upper }}</td></tr></tfoot>
-          </table>
-        </div>
-        {% if ly.rows %}
-        <div class="tc-table-wrap">
-          <table class="tc-table">
-            <thead><tr><th class="tc-left">Fecha</th><th>slri</th><th>7 dígitos</th><th>Gross</th><th>Fee</th><th>Neto</th></tr></thead>
-            <tbody>
-              {% for r in ly.rows %}
-              <tr><td class="tc-left">{{ ddmm(r.date) }}</td><td>{{ money(r.slri) }}</td><td>{{ money(r.other) }}</td><td>{{ money(r.gross) }}</td><td>{{ money(r.fees) }}</td><td>{{ money(r.net) }}</td></tr>
-              {% endfor %}
-            </tbody>
-            <tfoot><tr><td class="tc-left">Total</td><td>{{ money(ly.total.slri) }}</td><td>{{ money(ly.total.other) }}</td><td>{{ money(ly.total.gross) }}</td><td>{{ money(ly.total.fees) }}</td><td>{{ money(ly.total.net) }}</td></tr></tfoot>
-          </table>
-        </div>
-        {% if not ly.complete %}<p class="tc-note tc-diff">El detalle de cupones está cargado hasta el {{ ddmm(ly.covered_to) if ly.covered_to else '—' }}: faltan batches del mes.</p>{% endif %}
-        {% endif %}
-      </div>
     </div>
+  </div>
+
+  <div class="tc-pend-detail tc-loy-detail" id="tc-loy-detail" hidden>
+    <h3>Ingresos loyalty Chevron de {{ month_name|lower }} {{ year }}</h3>
+    <p class="tc-note" style="margin-top:0">Chevron devuelve el descuento de combustible que se da en la bomba (Desc. Comb) en los batches "slri…" y de 7 dígitos de los cupones de J.H. No son ventas de Store Info: se registran una vez por mes.</p>
+    <div class="tc-table-wrap">
+      <table class="tc-table">
+        <thead><tr><th class="tc-left">Cuenta</th><th>Debe</th><th>Haber</th></tr></thead>
+        <tbody>
+          <tr><td class="tc-left">{{ ly.debit_account }}</td><td>{{ money(ly.total.gross) }}</td><td></td></tr>
+          <tr><td class="tc-left">{{ ly.credit_account }}</td><td></td><td>{{ money(ly.total.gross) }}</td></tr>
+        </tbody>
+        <tfoot><tr><td class="tc-left" colspan="3">INGRESOS LOYALTY CHEVRON {{ month_upper }}</td></tr></tfoot>
+      </table>
+    </div>
+    {% if ly.rows %}
+    <div class="tc-table-wrap">
+      <table class="tc-table">
+        <thead><tr><th class="tc-left">Fecha</th><th>slri</th><th>7 dígitos</th><th>Gross</th><th>Fee</th><th>Neto</th></tr></thead>
+        <tbody>
+          {% for r in ly.rows %}
+          <tr><td class="tc-left">{{ ddmm(r.date) }}</td><td>{{ money(r.slri) }}</td><td>{{ money(r.other) }}</td><td>{{ money(r.gross) }}</td><td>{{ money(r.fees) }}</td><td>{{ money(r.net) }}</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><td class="tc-left">Total</td><td>{{ money(ly.total.slri) }}</td><td>{{ money(ly.total.other) }}</td><td>{{ money(ly.total.gross) }}</td><td>{{ money(ly.total.fees) }}</td><td>{{ money(ly.total.net) }}</td></tr></tfoot>
+      </table>
+    </div>
+    {% if not ly.complete %}<p class="tc-note tc-diff">El detalle de cupones está cargado hasta el {{ ddmm(ly.covered_to) if ly.covered_to else '—' }}: faltan batches del mes.</p>{% endif %}
+    {% endif %}
   </div>
 
   <div class="tc-pend-detail" id="tc-pend-detail" hidden>
     {% if last %}
-    <h3>Vendido con tarjeta sin DDC al {{ ddmm(last.date) }}: {{ money(last.pending) }}</h3>
+    <h3>Vendido con tarjeta sin DDC al {{ ddmm(last.date) }}: {{ money(sales_pending) }}</h3>
     {% if next_month_ddc %}
     <div class="tc-table-wrap">
       <table class="tc-table">
@@ -172,7 +184,7 @@
       </table>
     </div>
     {% set gap = (next_month_totals.gross - last.pending)|round(2) %}
-    <p class="tc-note">Los DDC que J.H. depositó después del cierre con ventas de {{ month_name|lower }}.{% if gap %} La diferencia de {{ money(gap) }} con lo vendido son batches que cruzan de día o que no son del POS.{% endif %}</p>
+    <p class="tc-note">Los DDC que J.H. depositó después del cierre con ventas de {{ month_name|lower }}.{% if gap and sales_from_ddc %} Traen {{ money(gap) }} más que lo vendido con tarjeta según Store Info ({{ money(last.pending) }}): son batches del loyalty y que cruzan de día, que también van a 1.03.02.{% elif not sales_from_ddc %} Todavía no llegaron todos: lo vendido sin DDC sale de Store Info.{% endif %}</p>
     {% else %}
     <p class="tc-note">Todavía no llegaron los DDC de estas ventas (o falta cargar el detalle de cupones).</p>
     {% endif %}

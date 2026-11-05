@@ -7540,7 +7540,17 @@ def _tarjetas_month(year, month, today):
     # tarjeta que todavía no era DDC más los DDC que ningún EFT aplicó, los
     # que en el Excel de Aplicación quedan sin pintar a fin de mes. Gross,
     # como 1.03.02.
+    # Lo vendido sin DDC se toma de los DDC que trajeron esas ventas cuando ya
+    # llegaron todos: traen también los batches del loyalty (slri) de esos
+    # días, que van a 1.03.02 con el asiento del loyalty. Septiembre 2026:
+    # $22,948.44 contra $22,807.86 calculado, y el pendiente da $29,296.67,
+    # el saldo de 1.03.02 en Ratio al 30/09.
     sales_pending = (last["pending"] or 0.0) if last else 0.0
+    arrived_to = max((g["to"] for g in pending["next_month_ddc"] if g.get("to")), default=None)
+    pending["sales_from_ddc"] = bool(last and arrived_to and arrived_to >= last["date"])
+    if pending["sales_from_ddc"]:
+        sales_pending = pending["next_month_totals"]["gross"]
+    pending["sales_pending"] = round(sales_pending, 2)
     pending["pending_total"] = round(sales_pending + (pending["pending_ddc_totals"]["gross"] or 0.0), 2)
     return control, pending
 
@@ -7566,10 +7576,10 @@ def controles_tarjetas_pendiente_pdf():
                 rows.append([g["deposit"].strftime("%d/%m/%Y") if g["deposit"] else "—", r["coupon"], sold, money(r["gross"]), money(r["net"])])
         rows.append(["Total", "", "", money(p["next_month_totals"]["gross"]), money(p["next_month_totals"]["net"])])
         sections.append({
-            "heading": f"Vendido con tarjeta sin DDC al {ddmm(last['date'])}: {money(last['pending'])}",
+            "heading": f"Vendido con tarjeta sin DDC al {ddmm(last['date'])}: {money(p['sales_pending'])}",
             "headers": ["Depositado", "DDC", "Ventas del", "Gross", "Neto"],
             "rows": rows, "bold_last_row": True,
-        } if len(rows) > 1 else {"heading": f"Vendido con tarjeta sin DDC al {ddmm(last['date'])}: {money(last['pending'])}",
+        } if len(rows) > 1 else {"heading": f"Vendido con tarjeta sin DDC al {ddmm(last['date'])}: {money(p['sales_pending'])}",
                                  "note": "Todavía no llegaron los DDC de estas ventas."})
     rows = [[r["date_display"], ", ".join(r["coupons"]), money(r["gross"]), money(r["fees"]), money(r["net"]),
              ", ".join(f"{x['rcv']} ({x['eft_date']:%d/%m})" for x in r["laters"]) or "Todavía en ningún EFT"]
