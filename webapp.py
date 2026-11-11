@@ -5046,12 +5046,20 @@ def _review_view(issues):
             lines.append(f"{item['department']}: no se pudo leer {what}.")
     mismatch = dept.get("subtotal_mismatch")
     if mismatch:
-        lines.append(
-            f"La suma de los departamentos (${mismatch.get('computed_amount') or 0:,.2f}) no da el total impreso"
-            f" (${mismatch.get('printed_amount') or 0:,.2f})."
-        )
+        computed_amount = mismatch.get("computed_amount") or 0
+        printed_amount = mismatch.get("printed_amount")
+        if printed_amount is not None and abs(computed_amount - printed_amount) >= 0.01:
+            lines.append(
+                f"La suma de los departamentos (${computed_amount:,.2f}) no da el total impreso"
+                f" (${printed_amount:,.2f})."
+            )
+        else:
+            lines.append(
+                f"La suma de las unidades de los departamentos ({round(mismatch.get('computed_count') or 0):,})"
+                f" no da el total impreso ({round(mismatch.get('printed_count') or 0):,})."
+            )
     if dept.get("total_unverified"):
-        lines.append("No se pudo leer el total impreso del reporte: no hay contra qué verificar la suma.")
+        lines.append("Falta el total impreso del reporte: tipealo en \"¿El reporte se cargó bien?\" para verificar la suma.")
     info_fields = set()
     if info.get("failed"):
         lines.append("No se pudo leer Store Info: cargalo a mano.")
@@ -5078,6 +5086,106 @@ def _review_view(issues):
         "info_fields": sorted(info_fields),
         "lottery": bool(lottery),
     }
+
+
+def _review_from_saved(day):
+    """
+    Lo que hay que revisar de un Close Store ya cargado, sacado de lo que
+    quedó guardado (pedido del usuario, 2026-11-11: los cargados antes del
+    "!" también). El PDF no se guarda, pero lo dudoso quedó vacío y el total
+    impreso sí está: departamentos o campos de Store Info vacíos, suma que no
+    da el total impreso, ONLINE/SKOFF de Lottery sin leer. `day` es una
+    entrada de reportes_db.get_month_saved_days con "lottery" (fila de
+    lottery_db o None) agregado. Mismo formato que guarda la carga.
+    """
+    issues = {}
+    departments = day.get("departments") or []
+    row = day.get("store_info") or {}
+    info_loaded = row.get("store_info_source") is not None
+    if departments:
+        dept = {}
+        doubtful = [
+            {"department": d["department"],
+             "fields": [f for f in ("count", "amount") if d.get(f) is None]}
+            for d in departments if d.get("count") is None or d.get("amount") is None
+        ]
+        if doubtful:
+            dept["doubtful"] = doubtful
+        printed_amount = row.get("printed_total_sales")
+        printed_count = row.get("printed_total_units")
+        if printed_amount is None and printed_count is None:
+            dept["total_unverified"] = True
+        else:
+            computed_amount = round(sum(d["amount"] for d in departments if d.get("amount") is not None), 2)
+            computed_count = sum(d["count"] for d in departments if d.get("count") is not None)
+            if ((printed_amount is not None and abs(printed_amount - computed_amount) >= 0.01)
+                    or (printed_count is not None and abs(printed_count - computed_count) >= 0.01)):
+                dept["subtotal_mismatch"] = {
+                    "computed_amount": computed_amount, "printed_amount": printed_amount,
+                    "computed_count": computed_count, "printed_count": printed_count,
+                }
+        if dept:
+            issues["departments"] = dept
+    elif info_loaded:
+        issues["departments"] = {"failed": True}
+    if info_loaded:
+        info = {}
+        missing = []
+        for label, names in _STORE_INFO_REVIEW_FIELDS.items():
+            columns = ["credit_terms_json" if n == "credit_terms" else n for n in names]
+            if any(row.get(c) is None for c in columns):
+                missing.append(label)
+        if missing:
+            info["missing"] = missing
+        parts = [row.get(n) for n in _STORE_INFO_TOTAL_SALES_PARTS]
+        if None not in parts:
+            difference = round(sum(parts[:-1]) - parts[-1], 2)
+            if abs(difference) > 0.02:
+                info["total_sales_mismatch"] = difference
+        if info:
+            issues["store_info"] = info
+    elif departments:
+        issues["store_info"] = {"failed": True}
+    lottery = day.get("lottery")
+    if lottery is None:
+        issues["lottery"] = {"failed": True}
+    else:
+        missing = [name for name, prefix in (("ONLINE", "online"), ("SKOFF", "skoff"))
+                   if lottery.get(f"{prefix}_count") is None or lottery.get(f"{prefix}_net_sales") is None]
+        if missing:
+            issues["lottery"] = {"missing": missing}
+    return issues
+
+
+@app.route("/reporte/historial/revisar", methods=["POST"])
+def reporte_historial_revisar():
+    """
+    Busca en los días ya cargados del mes lo que hay que revisar y les pone
+    el "!" (pedido del usuario, 2026-11-11, para lo cargado antes de que
+    existiera). Una marca de la carga se respeta: tiene más detalle.
+    """
+    year = request.form.get("year", type=int)
+    month = request.form.get("month", type=int)
+    if not year or not month or not 1 <= month <= 12:
+        abort(400)
+    days = reportes_db.get_month_saved_days(year, month)
+    lottery_days = lottery_db.get_days_between(date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1]))
+    existing = reportes_db.get_month_reviews(year, month)
+    flagged = 0
+    for date_str, day in sorted(days.items()):
+        if not day["departments"] and (day["store_info"] or {}).get("store_info_source") is None:
+            continue
+        issues = _review_from_saved({**day, "lottery": lottery_days.get(date_str)})
+        if not issues:
+            continue
+        issues.update(existing.get(date_str) or {})
+        reportes_db.save_review(date_str, issues)
+        flagged += 1
+    if flagged:
+        flash(f"{flagged} día(s) con algo para revisar: quedaron con el \"!\".", "warning")
+    else:
+        flash("Revisados los días del mes: no hay nada para revisar.", "success")
+    return redirect(url_for("reporte_historial", year=year, month=month))
 
 
 @app.route("/reporte/historial")

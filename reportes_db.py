@@ -335,6 +335,33 @@ def get_month_reviews(year, month):
     return {row["date"]: json.loads(row["issues_json"]) for row in rows}
 
 
+def get_month_saved_days(year, month):
+    """
+    Lo guardado de cada día del mes, para revisar Close Store ya cargados
+    (pedido del usuario, 2026-11-11): {fecha ISO: {"departments": [{department,
+    count, amount}], "store_info": fila de daily_reports o None}}. Lo que el
+    OCR no leyó con confianza quedó vacío (None), así que se ve acá.
+    """
+    like = (f"{year:04d}-{month:02d}-%",)
+    conn = _connect()
+    try:
+        dept_rows = conn.execute(
+            "SELECT date, department, count, amount FROM daily_report_departments "
+            "WHERE date LIKE ? ORDER BY date, department",
+            like,
+        ).fetchall()
+        info_rows = conn.execute("SELECT * FROM daily_reports WHERE date LIKE ? ORDER BY date", like).fetchall()
+    finally:
+        conn.close()
+    days = {}
+    for row in dept_rows:
+        days.setdefault(row["date"], {"departments": [], "store_info": None})["departments"].append(
+            {"department": row["department"], "count": row["count"], "amount": row["amount"]})
+    for row in info_rows:
+        days.setdefault(row["date"], {"departments": [], "store_info": None})["store_info"] = dict(row)
+    return days
+
+
 def clear_review_section(report_date, section):
     """Saca la marca de una sección del día (se guardó a mano: ya se revisó)."""
     issues = get_review(report_date)

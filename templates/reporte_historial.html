@@ -24,6 +24,13 @@
     <a href="{{ url_for('reporte_historial', year=next_year, month=next_month) }}" class="btn-secondary historial-nav-btn">Mes siguiente &rarr;</a>
   </div>
 
+  <form method="post" action="{{ url_for('reporte_historial_revisar') }}" class="rev-scan-form">
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <button type="submit" class="btn-secondary">Buscar días para revisar</button>
+    <span class="muted">Revisa lo ya cargado del mes (departamentos y Store Info vacíos, suma contra el total impreso, ONLINE/SKOFF) y le pone el <span class="rev-flag rev-flag-static">!</span> a los días con algo mal.</span>
+  </form>
+
   <form method="post" action="{{ url_for('reporte_historial_eliminar') }}" onsubmit="return confirm('¿Eliminar Ventas por Departamento de los días seleccionados? Store Info de esos días no se toca.');">
     <input type="hidden" name="year" value="{{ year }}">
     <input type="hidden" name="month" value="{{ month }}">
@@ -227,6 +234,8 @@
   .rev-flag { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border-radius: 999px; background: var(--warning, #D97706); color: #fff; font-size: 12px; font-weight: 800; line-height: 1; text-decoration: none; vertical-align: middle; }
   .rev-flag:hover { filter: brightness(0.92); color: #fff; }
   .rev-flag-static { margin: 0 4px 0 0; }
+  .rev-scan-form { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; font-size: 12.5px; }
+  .rev-scan-form .rev-flag { vertical-align: middle; }
   .rev-legend { margin: 10px 0 0; font-size: 12.5px; }
   .historial-col-check { width: 28px; text-align: center; }
   .dept-delete-toolbar {
