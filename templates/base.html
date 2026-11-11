@@ -986,8 +986,12 @@
        que tocar cada template. El color de la barra es el accent del
        propio módulo (var(--accent), ya seteado por página) -- "acorde al
        color del módulo" sale gratis, sin código extra por módulo. */
-    .upload-progress-wrap { display: none; margin-top: 12px; }
-    .upload-progress-wrap.active { display: block; }
+    /* La barra y su "Cancelar carga" van en un renglón propio (también en los
+       formularios en fila, como el de las fotos de Combustible) y con aire
+       abajo, para no quedar pegados al texto que sigue (pedido del usuario,
+       2026-11-11). */
+    .upload-progress-wrap { display: none; margin-top: 12px; flex-basis: 100%; width: 100%; }
+    .upload-progress-wrap.active { display: block; margin-bottom: 14px; }
     .upload-progress-track {
       height: 8px;
       border-radius: 999px;
@@ -1020,7 +1024,8 @@
       color: var(--text-soft);
       margin-top: 6px;
     }
-    .upload-cancel-btn { margin-top: 8px; padding: 5px 12px; font-size: 12.5px; }
+    /* Dos clases: les gana a los "form button { margin: 0 }" de cada página. */
+    .upload-progress-wrap .upload-cancel-btn { margin: 12px 0 0; padding: 5px 12px; font-size: 12.5px; }
 
     /* Selector rápido de mes/año, estilo calendario -- pedido explícito del
        usuario (2026-09-16, segunda tanda), con capturas de referencia de un
