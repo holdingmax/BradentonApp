@@ -7,6 +7,8 @@
 {% from "_pdf_links.html" import pdf_links %}
 {% set loaded_amount = departments|selectattr('amount', 'number')|sum(attribute='amount') %}
 {% set loaded_units = departments|selectattr('count', 'number')|sum(attribute='count') %}
+{# Lo que quedó para revisar al cargar el Close Store (pedido del usuario, 2026-11-11). #}
+{% macro rv(name) %}{% if review and name in review.info_fields %} dia-input-review{% endif %}{% endmacro %}
 <div class="page-header">
   <span class="eyebrow">Reporte Diario</span>
   <h1>{{ report_date.strftime('%d/%m/%Y') }}</h1>
@@ -22,7 +24,18 @@
   {% endif %}
 </div>
 
-<div class="card">
+{% if review %}
+<div class="dia-review-box">
+  <div class="dia-review-title"><span class="dia-review-flag">!</span> Revisá este día</div>
+  <ul>
+    {% for line in review.lines %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  {% if review.lottery %}<p>ONLINE y SKOFF se completan en <a href="{{ url_for('carga_datos_lottery_dia', report_date=report_date.isoformat()) }}">Lottery, el {{ report_date.strftime('%d/%m') }}</a>.</p>{% endif %}
+  <p class="muted">Lo marcado en rojo abajo es lo que no se pudo leer o no cerró. Al guardar cada parte, su marca se borra.</p>
+</div>
+{% endif %}
+
+<div class="card{{ ' dia-card-review' if review and review.dept_failed }}">
   <h2>Departamentos</h2>
   <p class="muted">Dejá en blanco cualquier fila que no vayas a usar. Tildá "Eliminar" para sacar un departamento cargado por error.</p>
   <form method="post" action="{{ url_for('reporte_dia_departamentos', report_date=report_date.isoformat()) }}" data-warn-unsaved>
@@ -33,18 +46,20 @@
         </thead>
         <tbody>
           {% for dept in departments %}
-          <tr>
+          {% set rv_dept = review.dept_fields.get(dept.department, []) if review else [] %}
+          <tr{% if rv_dept %} class="dia-row-review"{% endif %}>
             <td><input type="text" name="dept_name" value="{{ dept.department }}" readonly class="dia-input-readonly"></td>
             {# Vacío = el OCR no lo pudo leer con seguridad (nunca se guarda un valor dudoso): falta completarlo. #}
-            <td><input type="number" step="1" name="dept_count" value="{{ dept.count if dept.count is not none else '' }}"{% if dept.count is none %} class="dia-input-missing" placeholder="falta"{% endif %}></td>
-            <td><input type="number" step="0.01" name="dept_amount" value="{{ dept.amount if dept.amount is not none else '' }}"{% if dept.amount is none %} class="dia-input-missing" placeholder="falta"{% endif %}></td>
+            <td><input type="number" step="1" name="dept_count" value="{{ dept.count if dept.count is not none else '' }}" class="{{ 'dia-input-missing' if dept.count is none }}{{ ' dia-input-review' if 'count' in rv_dept }}"{% if dept.count is none %} placeholder="falta"{% endif %}></td>
+            <td><input type="number" step="0.01" name="dept_amount" value="{{ dept.amount if dept.amount is not none else '' }}" class="{{ 'dia-input-missing' if dept.amount is none }}{{ ' dia-input-review' if 'amount' in rv_dept }}"{% if dept.amount is none %} placeholder="falta"{% endif %}></td>
             <td class="dia-col-delete"><input type="checkbox" name="dept_delete" value="{{ dept.department }}"></td>
           </tr>
           {% endfor %}
-          <tr class="dept-new-row">
-            <td><input type="text" name="dept_name" list="known-departments" placeholder="Nuevo departamento"></td>
-            <td><input type="number" step="1" name="dept_count"></td>
-            <td><input type="number" step="0.01" name="dept_amount"></td>
+          {% set rv_new = review and review.unnamed %}
+          <tr class="dept-new-row{{ ' dia-row-review' if rv_new }}">
+            <td><input type="text" name="dept_name" list="known-departments" placeholder="Nuevo departamento"{% if rv_new %} class="dia-input-review"{% endif %}></td>
+            <td><input type="number" step="1" name="dept_count"{% if rv_new %} class="dia-input-review" placeholder="{{ review.unnamed[0].count }}"{% endif %}></td>
+            <td><input type="number" step="0.01" name="dept_amount"{% if rv_new %} class="dia-input-review" placeholder="{{ review.unnamed[0].amount }}"{% endif %}></td>
             <td></td>
           </tr>
         </tbody>
@@ -55,7 +70,7 @@
     </datalist>
     <button type="button" class="btn-secondary" id="dept-add-row" style="margin-top: 10px;">+ Agregar fila</button>
 
-    <div class="dia-check-box">
+    <div class="dia-check-box{{ ' dia-check-review' if review and review.dept_totals }}">
       <h3>¿El reporte se cargó bien?</h3>
       <p class="muted">Tipeá el monto total y las unidades totales tal cual figuran impresos en el reporte de ventas — se comparan solos contra la suma de lo cargado arriba.</p>
       <div class="dia-check-grid">
@@ -112,7 +127,7 @@
 {% endif %}
 
 {% set credit_total = (store_info.credit_terms if store_info else [])|sum %}
-<div class="card">
+<div class="card{{ ' dia-card-review' if review and review.info_failed }}">
   <h2>Store Info</h2>
   <p class="muted">Los mismos campos que ya completa la lectura automática del PDF.</p>
 
@@ -155,15 +170,15 @@
     <div class="dia-grid">
       <div>
         <label class="muted">Volume</label>
-        <input type="number" step="0.01" name="volume" value="{{ store_info.volume if store_info is not none else '' }}">
+        <input type="number" step="0.01" name="volume" class="{{ rv('volume') }}" value="{{ store_info.volume if store_info is not none else '' }}">
       </div>
       <div>
         <label class="muted">Sales Fuel</label>
-        <input type="number" step="0.01" name="sales_fuel" value="{{ store_info.sales_fuel if store_info else '' }}">
+        <input type="number" step="0.01" name="sales_fuel" class="{{ rv('sales_fuel') }}" value="{{ store_info.sales_fuel if store_info else '' }}">
       </div>
       <div>
         <label class="muted">Desc. Comb</label>
-        <input type="number" step="0.01" name="desc_comb" value="{{ store_info.desc_comb if store_info else '' }}">
+        <input type="number" step="0.01" name="desc_comb" class="{{ rv('desc_comb') }}" value="{{ store_info.desc_comb if store_info else '' }}">
       </div>
     </div>
 
@@ -171,15 +186,15 @@
     <div class="dia-grid">
       <div>
         <label class="muted">Non Fuel Total</label>
-        <input type="number" step="0.01" name="non_fuel_total" value="{{ store_info.non_fuel_total if store_info else '' }}">
+        <input type="number" step="0.01" name="non_fuel_total" class="{{ rv('non_fuel_total') }}" value="{{ store_info.non_fuel_total if store_info else '' }}">
       </div>
       <div>
         <label class="muted">Desc. Otros</label>
-        <input type="number" step="0.01" name="desc_otros" value="{{ store_info.desc_otros if store_info else '' }}">
+        <input type="number" step="0.01" name="desc_otros" class="{{ rv('desc_otros') }}" value="{{ store_info.desc_otros if store_info else '' }}">
       </div>
       <div>
         <label class="muted">Tax Collect</label>
-        <input type="number" step="0.01" name="tax_collect" value="{{ store_info.tax_collect if store_info else '' }}">
+        <input type="number" step="0.01" name="tax_collect" class="{{ rv('tax_collect') }}" value="{{ store_info.tax_collect if store_info else '' }}">
       </div>
     </div>
 
@@ -187,33 +202,33 @@
     <div class="dia-grid">
       <div>
         <label class="muted">Total Sales (impreso en el PDF)</label>
-        <input type="number" step="0.01" name="total_sales" value="{{ store_info.total_sales if store_info and store_info.total_sales is not none else '' }}">
+        <input type="number" step="0.01" name="total_sales" class="{{ rv('total_sales') }}" value="{{ store_info.total_sales if store_info and store_info.total_sales is not none else '' }}">
         <p class="muted" style="margin: 4px 0 0; font-size: 11px;">La tarjeta de arriba ya muestra el Total Sales real (con Gettel/VS restado) — este campo es el valor tal cual lo imprime el reporte, por si el OCR lo leyó mal.</p>
       </div>
       <div>
         <label class="muted">Cash</label>
-        <input type="number" step="0.01" name="cash" value="{{ store_info.cash if store_info else '' }}">
+        <input type="number" step="0.01" name="cash" class="{{ rv('cash') }}" value="{{ store_info.cash if store_info else '' }}">
       </div>
       <div>
         <label class="muted">Local Accounts</label>
-        <input type="number" step="0.01" name="local_accounts" value="{{ store_info.local_accounts if store_info else '' }}">
+        <input type="number" step="0.01" name="local_accounts" class="{{ rv('local_accounts') }}" value="{{ store_info.local_accounts if store_info else '' }}">
       </div>
       <div>
         <label class="muted">Other</label>
-        <input type="number" step="0.01" name="other_amount" value="{{ store_info.other_amount if store_info and store_info.other_amount is not none else '' }}">
+        <input type="number" step="0.01" name="other_amount" class="{{ rv('other_amount') }}" value="{{ store_info.other_amount if store_info and store_info.other_amount is not none else '' }}">
       </div>
       <div>
         <label class="muted">Network Revenue</label>
-        <input type="number" step="0.01" name="network_revenue" value="{{ store_info.network_revenue if store_info else '' }}">
+        <input type="number" step="0.01" name="network_revenue" class="{{ rv('network_revenue') }}" value="{{ store_info.network_revenue if store_info else '' }}">
       </div>
       <div>
         <label class="muted">Total Revenue</label>
-        <input type="number" step="0.01" name="total_revenue" value="{{ store_info.total_revenue if store_info else '' }}">
+        <input type="number" step="0.01" name="total_revenue" class="{{ rv('total_revenue') }}" value="{{ store_info.total_revenue if store_info else '' }}">
       </div>
     </div>
 
     <label class="muted">Montos de tarjeta/crédito (separados por coma y espacio, o punto y coma, si hay más de uno)</label>
-    <input type="text" name="credit_terms" id="credit-terms-input" value="{{ store_info.credit_terms|join(', ') if store_info else '' }}" placeholder="Ej. 500.00, 300.00">
+    <input type="text" name="credit_terms" id="credit-terms-input" class="{{ rv('credit_terms') }}" value="{{ store_info.credit_terms|join(', ') if store_info else '' }}" placeholder="Ej. 500.00, 300.00">
     <div class="muted" id="credit-terms-breakdown" style="margin-top: 6px;"></div>
 
     <div class="form-actions">
@@ -229,7 +244,19 @@
   .dia-table tbody tr { border-bottom: 1px solid var(--border); }
   .dia-table input[type=text], .dia-table input[type=number] { padding: 6px 8px; font-size: 12.5px; }
   .dia-col-delete { text-align: center; }
+  /* Lo que no se pudo leer o no cerró al cargar el Close Store (2026-11-11). */
+  .dia-review-box { margin: 0 0 18px; padding: 14px 18px; border: 1px solid #FCA5A5; border-left: 4px solid var(--error, #DC2626); border-radius: var(--radius); background: #FEF2F2; font-size: 13.5px; }
+  .dia-review-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14.5px; margin-bottom: 6px; }
+  .dia-review-flag { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 999px; background: var(--error, #DC2626); color: #fff; font-size: 13px; font-weight: 800; }
+  .dia-review-box ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 3px; }
+  .dia-review-box p { margin: 8px 0 0; }
+  input.dia-input-review, .dia-table input.dia-input-review { border: 2px solid var(--error, #DC2626); background: #FEF2F2; }
+  .dia-table tr.dia-row-review td:first-child input { color: var(--error, #DC2626); font-weight: 700; }
+  .dia-check-review .dia-check-grid input { border: 2px solid var(--error, #DC2626); background: #FEF2F2; }
+  .dia-check-review h3 { color: var(--error, #DC2626); }
+  .card.dia-card-review { border-color: var(--error, #DC2626); box-shadow: 0 0 0 1px var(--error, #DC2626); }
   .dia-table input.dia-input-missing { border-color: var(--warning, #D97706); background: color-mix(in srgb, var(--warning, #D97706) 10%, var(--surface)); }
+  .dia-table input.dia-input-missing.dia-input-review { border: 2px solid var(--error, #DC2626); background: #FEF2F2; }
   .dia-col-delete input[type=checkbox] { width: 16px; height: 16px; }
   .dia-check-box {
     margin-top: 18px;

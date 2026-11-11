@@ -101,6 +101,19 @@ def _ensure_schema(conn):
     # 33/38, columnas I-N) pero el usuario los puede editar desde la
     # propia página de Proyecciones sin tocar código. Un valor por fila,
     # nunca se borran filas -- solo se pisan (ver save_department_margins).
+    # Lo que quedó para revisar al cargar el Close Store de cada día (pedido
+    # del usuario, 2026-11-11): el "!" de Ventas por Departamento y las
+    # marcas al editar el día. issues_json = {"departments": {...},
+    # "store_info": {...}, "lottery": {...}}, ver save_review.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS daily_report_review (
+            date TEXT PRIMARY KEY,
+            issues_json TEXT NOT NULL,
+            updated_at TEXT
+        )
+        """
+    )
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS department_margins (
@@ -267,6 +280,67 @@ def delete_department_row(report_date, department):
         conn.commit()
     finally:
         conn.close()
+
+
+REVIEW_SECTIONS = ("departments", "store_info", "lottery")
+
+
+def save_review(report_date, issues):
+    """
+    Lo que hay que revisar de un día, según la última carga de su Close Store
+    (pedido del usuario, 2026-11-11). issues: {sección: dict}, con las
+    secciones de REVIEW_SECTIONS; una sección vacía no se guarda. Sin nada
+    para revisar, el día queda sin marca (una carga nueva que salió bien
+    borra la marca de la anterior).
+    """
+    key = _date_key(report_date)
+    issues = {name: value for name, value in (issues or {}).items() if name in REVIEW_SECTIONS and value}
+    conn = _connect()
+    try:
+        if not issues:
+            conn.execute("DELETE FROM daily_report_review WHERE date = ?", (key,))
+        else:
+            conn.execute(
+                """
+                INSERT INTO daily_report_review (date, issues_json, updated_at) VALUES (?, ?, ?)
+                ON CONFLICT (date) DO UPDATE SET issues_json = excluded.issues_json, updated_at = excluded.updated_at
+                """,
+                (key, json.dumps(issues, ensure_ascii=False), _now()),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_review(report_date):
+    """{sección: dict} de lo que hay que revisar del día, o {} si no hay nada."""
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT issues_json FROM daily_report_review WHERE date = ?", (_date_key(report_date),)).fetchone()
+    finally:
+        conn.close()
+    return json.loads(row["issues_json"]) if row else {}
+
+
+def get_month_reviews(year, month):
+    """{fecha ISO: {sección: dict}} de los días del mes con algo para revisar."""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT date, issues_json FROM daily_report_review WHERE date LIKE ? ORDER BY date",
+            (f"{year:04d}-{month:02d}-%",),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {row["date"]: json.loads(row["issues_json"]) for row in rows}
+
+
+def clear_review_section(report_date, section):
+    """Saca la marca de una sección del día (se guardó a mano: ya se revisó)."""
+    issues = get_review(report_date)
+    if section in issues:
+        issues.pop(section)
+        save_review(report_date, issues)
 
 
 def delete_departments_for_date(report_date):

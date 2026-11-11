@@ -2393,6 +2393,18 @@ def extract_department_sales_for_day(pdf_path):
             f"{item['department']} ({' y '.join('unidades' if f == 'count' else 'monto' for f in item['fields'])})"
             for item in diagnostics.get("doubtful_departments") or []
         ],
+        # Lo mismo sin armar el texto, para marcar cada campo al editar el día
+        # (2026-11-11): {"department", "fields": ["count"/"amount"], "values"
+        # (solo el renglón sin nombre)}, con el nombre como quedó guardado.
+        "doubtful_items": [
+            {
+                "department": "LOCAL ACCT" if item.get("department") == "GETTEL/TOYOTA" else item.get("department"),
+                "fields": list(item.get("fields") or []),
+                **({"values": {"count": item["values"].get("count"), "amount": item["values"].get("amount")}}
+                   if item.get("values") else {}),
+            }
+            for item in diagnostics.get("doubtful_departments") or []
+        ],
         "printed_totals": diagnostics.get("printed_totals"),
         "total_unverified": bool(diagnostics.get("total_unverified")),
     }

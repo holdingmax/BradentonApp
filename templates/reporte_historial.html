@@ -74,12 +74,14 @@
             </td>
             <td class="historial-col-action">
               <a href="{{ url_for('reporte_dia', report_date=day.date) }}">{{ 'Ver / editar' if (day.department_count or day.store_info_source) else 'Cargar a mano' }}</a>
+              {% if day.review_lines %}<a class="rev-flag" href="{{ url_for('reporte_dia', report_date=day.date) }}" title="Revisá este día:{% for line in day.review_lines %}&#10;• {{ line }}{% endfor %}" aria-label="Revisá este día">!</a>{% endif %}
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+    {% if overview|selectattr('review_lines')|list %}<p class="muted rev-legend"><span class="rev-flag rev-flag-static">!</span> El Close Store de ese día se cargó con algo para revisar. Pasá el mouse para ver qué; al entrar, está marcado.</p>{% endif %}
   </form>
 </div>
 
@@ -221,6 +223,11 @@
      el box-shadow divisorio, solo el link centrado en vez de pegado a la
      izquierda (contra "Total ventas") o forzado al borde derecho. */
   .historial-col-action { text-align: center; white-space: nowrap; }
+  /* "!" de los días a revisar (pedido del usuario, 2026-11-11). */
+  .rev-flag { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border-radius: 999px; background: var(--warning, #D97706); color: #fff; font-size: 12px; font-weight: 800; line-height: 1; text-decoration: none; vertical-align: middle; }
+  .rev-flag:hover { filter: brightness(0.92); color: #fff; }
+  .rev-flag-static { margin: 0 4px 0 0; }
+  .rev-legend { margin: 10px 0 0; font-size: 12.5px; }
   .historial-col-check { width: 28px; text-align: center; }
   .dept-delete-toolbar {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;

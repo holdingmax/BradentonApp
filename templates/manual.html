@@ -198,17 +198,27 @@
       {{ shot('reporte-cstore', 'Reporte C-Store') }}
       <ol class="manual-steps">
         <li><span class="n">1</span><p>Elegí uno o más PDF de cierre ("Close Store DD-MM.pdf").</p></li>
-        <li><span class="n">2</span><p><b>Guardar</b>. Al terminar dice "Se cargó exitosamente." o "Revisá: dd/mm".</p></li>
+        <li><span class="n">2</span><p><b>Guardar</b>. Al terminar dice "Se cargó exitosamente." o "Revisá: dd/mm" (ese día queda con un <b>!</b> para revisar).</p></li>
         <li><span class="n">3</span><p>A fin de mes, el reporte mensual ("Resumen Ventas") → <b>Guardar y cruzar</b>.</p></li>
       </ol>
       <div class="manual-tip"><b>Tené en cuenta:</b>
         <ul>
           <li>El nombre del archivo tiene que tener la fecha real.</li>
           <li>Las facturas abrochadas al final del cierre se cargan solas en Proveedores. El aviso dice cuáles se cargaron, cuáles ya estaban y cuál no se pudo leer (esa, cargala en Proveedores).</li>
-          <li>Lo que no se lee queda vacío: completalo en la barra lateral → Ventas por Departamento o Store Info.</li>
+          <li>Lo que no se lee queda vacío o marcado para revisar: el día aparece con un <b>!</b> en Ventas por Departamento (abajo).</li>
           <li>Si el mensual tiene una hoja ilegible, queda pendiente: pedí la hoja otra vez y subila; completa solo lo vacío.</li>
         </ul>
       </div>
+      <h3>Días para revisar <span class="manual-where">barra lateral → Ventas por Departamento</span></h3>
+      {{ shot('revisar-historial', 'Ventas por Departamento con un día para revisar') }}
+      <ol class="manual-steps">
+        <li><span class="n">1</span><p>El <b>!</b> naranja a la derecha: ese Close Store se cargó con algo que no se pudo leer o no cerró. Pasá el mouse para ver qué, o tocá <b>Ver / editar</b>.</p></li>
+      </ol>
+      {{ shot('revisar-dia', 'Día con lo que hay que revisar marcado en rojo') }}
+      <ol class="manual-steps">
+        <li><span class="n">1</span><p>Arriba, el cuadro rojo dice qué revisar: departamentos, la suma contra el total impreso, Store Info y ONLINE/SKOFF de Lottery (este último, con el link al día en Lottery).</p></li>
+        <li><span class="n">2</span><p>Abajo, en rojo, el renglón o el campo que no se pudo leer. Corregilo mirando el PDF y tocá <b>Guardar</b> de esa parte: su marca se borra. Cuando no queda ninguna, el <b>!</b> desaparece.</p></li>
+      </ol>
     </section>
 
     <section class="manual-module" id="lottery" style="--c: #0284C7">

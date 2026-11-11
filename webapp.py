@@ -2789,6 +2789,11 @@ def _run_carga_datos_reporte_diario_job(job_id, pdf_paths, origin="reporte"):
             got_store_info = False
             got_store_info_partial = False
             file_had_mismatch = False
+            # Lo que quedó para revisar de este día (el "!" de Ventas por
+            # Departamento, pedido del usuario 2026-11-11).
+            review_issues = {}
+            departments_failed = False
+            store_info_failed = False
 
             def _check_filename_date(candidate_date):
                 if filename_day_month and (candidate_date.day, candidate_date.month) != filename_day_month:
@@ -2815,6 +2820,14 @@ def _run_carga_datos_reporte_diario_job(job_id, pdf_paths, origin="reporte"):
                     days_doubtful[candidate_date] = result["doubtful_departments"]
                 if result.get("total_unverified"):
                     days_unverified.add(candidate_date)
+                dept_issues = {}
+                if result.get("doubtful_items"):
+                    dept_issues["doubtful"] = result["doubtful_items"]
+                if result.get("subtotal_mismatch"):
+                    dept_issues["subtotal_mismatch"] = result["subtotal_mismatch"]
+                if result.get("total_unverified"):
+                    dept_issues["total_unverified"] = True
+                review_issues["departments"] = dept_issues
                 # El total impreso al pie de la tabla queda guardado para el
                 # chequeo "Total impreso" del día (antes había que tipearlo).
                 printed = result.get("printed_totals")
@@ -2823,6 +2836,8 @@ def _run_carga_datos_reporte_diario_job(job_id, pdf_paths, origin="reporte"):
             except Exception as exc:
                 if "no coincide con la fecha del nombre" in str(exc):
                     file_had_mismatch = True
+                else:
+                    departments_failed = True
                 print(f"[carga-datos/reporte-diario] departamentos de {pdf_path}: {exc}")
 
             if not file_had_mismatch:
@@ -2843,12 +2858,20 @@ def _run_carga_datos_reporte_diario_job(job_id, pdf_paths, origin="reporte"):
                     # se guarda el resto y se avisa qué falta completar.
                     if result["fields"].get("missing_fields"):
                         days_store_info_missing[candidate_date] = result["fields"]["missing_fields"]
+                    info_issues = {}
+                    if result["fields"].get("missing_fields"):
+                        info_issues["missing"] = list(result["fields"]["missing_fields"])
+                    if result["fields"].get("total_sales_mismatch"):
+                        info_issues["total_sales_mismatch"] = result["fields"]["total_sales_mismatch"]
+                    review_issues["store_info"] = info_issues
                     day_date = candidate_date
                     got_store_info = not result["fields"].get("missing_fields")
                     got_store_info_partial = bool(result["fields"].get("missing_fields"))
                 except Exception as exc:
                     if "no coincide con la fecha del nombre" in str(exc):
                         file_had_mismatch = True
+                    else:
+                        store_info_failed = True
                     print(f"[carga-datos/reporte-diario] store info de {pdf_path}: {exc}")
 
             if not file_had_mismatch:
@@ -2864,15 +2887,25 @@ def _run_carga_datos_reporte_diario_job(job_id, pdf_paths, origin="reporte"):
                     )
                     if fields["missing"]:
                         days_lottery_missing[fields["report_date"]] = fields["missing"]
+                        review_issues["lottery"] = {"missing": list(fields["missing"])}
                 except Exception as exc:
                     if "no coincide con la fecha del nombre" not in str(exc):
                         lottery_unreadable += 1
+                        review_issues["lottery"] = {"failed": True}
                     print(f"[carga-datos/reporte-diario] ONLINE/SKOFF de {pdf_path}: {exc}")
 
             # Las facturas de proveedores abrochadas al final del cierre se
             # cargan solas en Proveedores (2026-10-15).
             if not file_had_mismatch and day_date is not None:
                 _load_attached_invoices(pdf_path, day_date, invoice_tally)
+                if departments_failed:
+                    review_issues["departments"] = {"failed": True}
+                if store_info_failed:
+                    review_issues["store_info"] = {"failed": True}
+                try:
+                    reportes_db.save_review(day_date, review_issues)
+                except Exception as exc:
+                    print(f"[carga-datos/reporte-diario] marcas para revisar de {day_date}: {exc}")
 
             if file_had_mismatch:
                 date_mismatches += 1
@@ -3272,6 +3305,8 @@ def carga_datos_lottery_dia_guardar(report_date):
         flash("No se pudo guardar: revisá que los montos sean números válidos.", "error")
         return redirect(url_for("carga_datos_lottery_dia", report_date=report_date))
 
+    # ONLINE/SKOFF completados a mano: el Close Store del día ya no marca Lottery.
+    reportes_db.clear_review_section(report_date, "lottery")
     flash("Día guardado.", "success")
     return redirect(url_for("carga_datos_lottery_dia", report_date=report_date))
 
@@ -4962,6 +4997,89 @@ _CATEGORY_DISPLAY_LABELS = {
 }
 
 
+# Campos de Store Info que marca cada etiqueta que la lectura no pudo leer
+# (missing_fields de reporte_diario.extract_store_info_for_day).
+_STORE_INFO_REVIEW_FIELDS = {
+    "Total Fuel Sales": ("volume", "sales_fuel"),
+    "Fuel Discounts": ("desc_comb",),
+    "Total Non Fuel Sales": ("non_fuel_total",),
+    "Other Discounts": ("desc_otros",),
+    "Total Taxes Collected": ("tax_collect",),
+    "Total Sales": ("total_sales",),
+    "Cash": ("cash",),
+    "Tarjetas / LOCAL ACCOUNTS": ("credit_terms", "local_accounts"),
+    "Other": ("other_amount",),
+    "Network Revenue": ("network_revenue",),
+    "Total Revenue": ("total_revenue",),
+}
+# Los que forman el Total Sales impreso: si no cierra, alguno se leyó mal.
+_STORE_INFO_TOTAL_SALES_PARTS = ("sales_fuel", "desc_comb", "non_fuel_total", "desc_otros", "tax_collect", "total_sales")
+
+
+def _review_view(issues):
+    """
+    Lo que hay que revisar de un día (reportes_db.get_review), listo para
+    mostrar (pedido del usuario, 2026-11-11): los renglones del aviso y qué
+    marcar al editar el día. None si no hay nada.
+    """
+    if not issues:
+        return None
+    lines = []
+    dept = issues.get("departments") or {}
+    info = issues.get("store_info") or {}
+    lottery = issues.get("lottery") or {}
+    dept_fields = {}
+    unnamed = []
+    if dept.get("failed"):
+        lines.append("No se pudieron leer los departamentos: cargalos a mano.")
+    for item in dept.get("doubtful") or []:
+        fields = [f for f in item.get("fields") or [] if f in ("count", "amount")]
+        if item.get("values"):
+            values = item["values"]
+            unnamed.append(values)
+            amount = values.get("amount")
+            amount_text = f"${amount:,.2f}" if isinstance(amount, (int, float)) else "monto sin leer"
+            lines.append(f"Un renglón con el nombre ilegible ({values.get('count')} unidades, {amount_text}): agregalo con su departamento.")
+        elif item.get("department"):
+            dept_fields.setdefault(item["department"], set()).update(fields)
+            what = " y ".join("las unidades" if f == "count" else "el monto" for f in fields) or "el renglón"
+            lines.append(f"{item['department']}: no se pudo leer {what}.")
+    mismatch = dept.get("subtotal_mismatch")
+    if mismatch:
+        lines.append(
+            f"La suma de los departamentos (${mismatch.get('computed_amount') or 0:,.2f}) no da el total impreso"
+            f" (${mismatch.get('printed_amount') or 0:,.2f})."
+        )
+    if dept.get("total_unverified"):
+        lines.append("No se pudo leer el total impreso del reporte: no hay contra qué verificar la suma.")
+    info_fields = set()
+    if info.get("failed"):
+        lines.append("No se pudo leer Store Info: cargalo a mano.")
+    if info.get("missing"):
+        for label in info["missing"]:
+            info_fields.update(_STORE_INFO_REVIEW_FIELDS.get(label, ()))
+        lines.append("Store Info sin leer: " + ", ".join(info["missing"]) + ".")
+    if info.get("total_sales_mismatch"):
+        info_fields.update(_STORE_INFO_TOTAL_SALES_PARTS)
+        lines.append(f"Store Info no cierra contra el Total Sales impreso: diferencia de ${abs(info['total_sales_mismatch']):,.2f}.")
+    if lottery.get("failed"):
+        lines.append("No se pudo leer ONLINE/SKOFF de Lottery.")
+    elif lottery.get("missing"):
+        lines.append("Lottery: no se pudo leer " + " ni ".join(lottery["missing"]) + ".")
+    if not lines:
+        return None
+    return {
+        "lines": lines,
+        "dept_failed": bool(dept.get("failed")),
+        "dept_fields": {name: sorted(fields) for name, fields in dept_fields.items()},
+        "unnamed": unnamed,
+        "dept_totals": bool(mismatch or dept.get("total_unverified")),
+        "info_failed": bool(info.get("failed")),
+        "info_fields": sorted(info_fields),
+        "lottery": bool(lottery),
+    }
+
+
 @app.route("/reporte/historial")
 def reporte_historial():
     """
@@ -4987,9 +5105,13 @@ def reporte_historial():
     # categorías con algo cargado) a 6 columnas fijas de la propia tabla --
     # las 6 SIEMPRE se devuelven, aunque den $0, para que la columna
     # correspondiente muestre "0" en vez de desaparecer.
+    reviews = reportes_db.get_month_reviews(year, month)
     for day in overview:
         day_groups, _unmatched = group_department_sales(day["department_detail"])
         day["category_groups"] = day_groups
+        # El "!" de la derecha: el Close Store de ese día se cargó con avisos.
+        view = _review_view(reviews.get(day["date"]))
+        day["review_lines"] = view["lines"] if view else []
     department_totals = reportes_db.get_month_department_totals(year, month)
     department_groups, department_unmatched = group_department_sales(department_totals)
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
@@ -5035,6 +5157,7 @@ def reporte_historial_eliminar():
         rows = reportes_db.delete_departments_for_date(date_str)
         if rows:
             deleted += 1
+            reportes_db.clear_review_section(date_str, "departments")
     if deleted:
         flash(f"{deleted} día(s) de Ventas por Departamento eliminados.", "success")
     else:
@@ -5379,6 +5502,7 @@ def reporte_dia(report_date):
         printed_total_sales=day["printed_total_sales"],
         printed_total_units=day["printed_total_units"],
         known_departments=reportes_db.list_known_departments(),
+        review=_review_view(reportes_db.get_review(parsed_date)),
         **THEME_BY_KEY["reporte"],
     )
 
@@ -5439,6 +5563,8 @@ def reporte_dia_departamentos(report_date):
         flash(f"{saved} departamento(s) guardado(s). {skipped} con un número/monto inválido, no se guardaron.", "warning")
     else:
         flash(f"{saved} departamento(s) guardado(s).", "success")
+    # Guardado a mano = revisado: se saca la marca de los departamentos.
+    reportes_db.clear_review_section(report_date, "departments")
     return redirect(url_for("reporte_dia", report_date=report_date))
 
 
@@ -5491,6 +5617,7 @@ def reporte_dia_store_info(report_date):
         flash("No se pudo guardar: revisá que los montos sean números válidos.", "error")
         return redirect(url_for("reporte_dia", report_date=report_date))
 
+    reportes_db.clear_review_section(report_date, "store_info")
     flash("Store Info guardado.", "success")
     return redirect(url_for("reporte_dia", report_date=report_date))
 
