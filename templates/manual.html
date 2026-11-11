@@ -11,7 +11,7 @@
 <div class="page-header">
   <span class="eyebrow">BradentonApp</span>
   <h1>Manual de Usuario</h1>
-  <p class="page-subtitle">La página en tres partes: Carga de Datos, Reportes y Controles. En cada captura, los números rojos son los pasos.</p>
+  <p class="page-subtitle">La página en tres partes (Carga de Datos, Reportes y Controles), más el Panel de proyecciones. En cada captura, los números rojos son los pasos.</p>
 </div>
 
 <div class="manual-shell">
@@ -63,9 +63,20 @@
         <li><a href="#c-tarjetas" data-target="c-tarjetas"><span class="manual-toc-dot"></span>Tarjetas y Cupones</a></li>
         <li><a href="#c-depositos" data-target="c-depositos"><span class="manual-toc-dot"></span>Control Depósitos</a></li>
         <li><a href="#c-cmv" data-target="c-cmv"><span class="manual-toc-dot"></span>Control CMV</a></li>
+        <li><a href="#c-combustible" data-target="c-combustible"><span class="manual-toc-dot"></span>Combustible</a></li>
         <li><a href="#c-kia" data-target="c-kia"><span class="manual-toc-dot"></span>Kia y Toyota</a></li>
         <li><a href="#c-productos" data-target="c-productos"><span class="manual-toc-dot"></span>Productos de proveedores</a></li>
-        <li><a href="#c-ventas" data-target="c-ventas"><span class="manual-toc-dot"></span>Ventas y costos</a></li>
+        <li><a href="#c-ventas" data-target="c-ventas"><span class="manual-toc-dot"></span>Ventas y Costos</a></li>
+      </ul>
+    </div>
+    <div>
+      <button type="button" class="manual-toc-toggle" aria-expanded="true">
+        <span class="manual-toc-label">Panel de proyecciones</span>
+        <svg class="manual-toc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <ul class="manual-toc-list">
+        <li><a href="#proyecciones" data-target="proyecciones"><span class="manual-toc-dot"></span>Proyecciones</a></li>
+        <li><a href="#utilidad-neta" data-target="utilidad-neta"><span class="manual-toc-dot"></span>Utilidad neta</a></li>
       </ul>
     </div>
   </nav>
@@ -81,6 +92,7 @@
         <li><span class="n">1</span><p><b>Carga de Datos</b>: subís los archivos (PDF, Excel, fotos). La página los lee y los guarda.</p></li>
         <li><span class="n">2</span><p><b>Reportes</b>: bajás el resumen de un mes en PDF.</p></li>
         <li><span class="n">3</span><p><b>Controles</b>: revisás que el mes cierre con lo ya cargado.</p></li>
+        <li><span class="n">4</span><p><b>Panel de proyecciones</b>: cómo cerraría el mes al ritmo de lo vendido. Está arriba en todas las páginas.</p></li>
       </ol>
 
       <h3 class="manual-intro-subhead">La barra lateral</h3>
@@ -104,7 +116,7 @@
         {{ shot('botonera', 'Botonera de controles rápidos abierta') }}
         <ol class="manual-steps">
           <li><span class="n">1</span><p>El botón del rayo, abajo a la derecha, está en todas las páginas.</p></li>
-          <li><span class="n">2</span><p>Tarjetas, Caja, Kia y Toyota y EFT: un resumen del mes sin salir de donde estás. Arranca en el mes actual; las flechas cambian de mes.</p></li>
+          <li><span class="n">2</span><p>Tarjetas, Caja, Kia y Toyota y EFT: un resumen sin salir de donde estás. Arranca en el mes actual; las flechas cambian de mes. <b>Servicios</b>: cuándo bajar las facturas de FPL, Manatee y Airgas.</p></li>
         </ol>
       </div>
 
@@ -171,7 +183,11 @@
           <tr><td>☐</td><td>Excel de Cierre (hoja Gettel-Toyota)</td><td>Gettel / Toyota</td></tr>
           <tr><td>☐</td><td>Elistar: costo por producto y ventas del mes</td><td>CMV</td></tr>
           <tr><td>☐</td><td>Elistar: Depts Report o P &amp; L del mes</td><td>Controles → Control CMV</td></tr>
+          <tr><td>☐</td><td>Fotos del ticket "Inventory Report" de los tanques (el del último día)</td><td>Controles → Combustible</td></tr>
           <tr><td>☐</td><td>Registrar el Sale Tax y marcarlo</td><td>Controles → Cierre</td></tr>
+
+          <tr class="grp"><td colspan="3">Cuando el mes está cerrado en el Bce</td></tr>
+          <tr><td>☐</td><td>Excel del Bce (hoja BALANCE HISTORICO)</td><td>Panel de proyecciones → Control contra el Balance</td></tr>
         </tbody>
       </table>
     </section>
@@ -188,6 +204,7 @@
       <div class="manual-tip"><b>Tené en cuenta:</b>
         <ul>
           <li>El nombre del archivo tiene que tener la fecha real.</li>
+          <li>Las facturas abrochadas al final del cierre se cargan solas en Proveedores. El aviso dice cuáles se cargaron, cuáles ya estaban y cuál no se pudo leer (esa, cargala en Proveedores).</li>
           <li>Lo que no se lee queda vacío: completalo en la barra lateral → Ventas por Departamento o Store Info.</li>
           <li>Si el mensual tiene una hoja ilegible, queda pendiente: pedí la hoja otra vez y subila; completa solo lo vacío.</li>
         </ul>
@@ -262,8 +279,9 @@
       <ol class="manual-steps">
         <li><span class="n">1</span><p>Elegí una o más facturas en PDF.</p></li>
         <li><span class="n">2</span><p><b>Subir y cargar</b>. Una factura ya cargada se saltea.</p></li>
-        <li><span class="n">3</span><p><b>Físico</b>: el cuadro del mes. Ahí se corrige o borra una factura.</p></li>
+        <li><span class="n">3</span><p><b>Físico</b>: las facturas del mes. Ahí se corrige o borra una factura.</p></li>
       </ol>
+      <div class="manual-tip"><b>Tené en cuenta:</b> el control del mes (stock, margen por galón y la hoja Físico) y las fotos del inventario están en Controles → Combustible.</div>
     </section>
 
     <section class="manual-module" id="depositos" style="--c: #65A30D">
@@ -371,8 +389,8 @@
       <div class="manual-module-head"><span class="manual-kicker">Reportes</span><h2>Bajar un reporte</h2></div>
       {{ shot('reportes', 'Reportes') }}
       <ol class="manual-steps">
-        <li><span class="n">1</span><p>En la tarjeta del reporte, elegí mes y año.</p></li>
-        <li><span class="n">2</span><p><b>Descargar PDF</b>.</p></li>
+        <li><span class="n">1</span><p>Elegí mes y año una sola vez, arriba: vale para todos los reportes.</p></li>
+        <li><span class="n">2</span><p><b>Descargar</b> en la tarjeta del reporte que necesites.</p></li>
       </ol>
       <table class="manual-check manual-list">
         <tbody>
@@ -392,12 +410,13 @@
     <div class="manual-section-heading">
       <span class="manual-part">Parte 3</span>
       <h2>Controles</h2>
-      <p>Comparan lo cargado para saber si el mes cierra. Acá no se carga nada (salvo Elistar en Control CMV).</p>
+      <p>Comparan lo cargado para saber si el mes cierra. Acá casi no se carga nada: solo Elistar en Control CMV, y las fotos y el inventario en Combustible.</p>
     </div>
 
     <section class="manual-intro">
       <ul class="manual-need">
         <li>Elegí el mes con las flechas de arriba.</li>
+        <li>Tocá un número subrayado: se abre un cuadro con de dónde sale, sin moverte de la página.</li>
         <li><b>Verde</b>: bien. <b>Ámbar</b>: falta algo o hay que mirarlo. <b>Rojo</b>: diferencia.</li>
         <li>Del mes en curso, los avisos de "falta cargar" aparecen desde el día 24.</li>
       </ul>
@@ -405,7 +424,7 @@
 
     <section class="manual-module" id="c-cierre" style="--c: #16A34A">
       <div class="manual-module-head"><span class="manual-kicker">Controles</span><h2>Cierre</h2></div>
-      <p class="manual-lede">Los dos asientos de cierre del mes (hoja Store Info del Excel Cierre).</p>
+      <p class="manual-lede">Los asientos de cierre del mes (hoja Store Info del Excel Cierre), con los nombres de cuenta de Ratio.</p>
       {{ shot('cierre', 'Control Cierre') }}
       <ol class="manual-steps">
         <li><span class="n">1</span><p>Elegí el mes.</p></li>
@@ -417,7 +436,7 @@
         <li><span class="n">4</span><p>A fin de mes: el asiento del Sale Tax para pasar al sistema contable.</p></li>
         <li><span class="n">5</span><p>Pasado el asiento, <b>Marcar como registrado</b> (el N° es opcional).</p></li>
       </ol>
-      <div class="manual-tip"><b>Tené en cuenta:</b> más abajo está el cruce de las tarjetas con J.H. El Cierre se baja en PDF o Excel.</div>
+      <div class="manual-tip"><b>Tené en cuenta:</b> más abajo están el cruce de las tarjetas con J.H. y el cruce con el reporte mensual. <b>Exportar</b>, al final: el control entero en PDF, o en Excel.</div>
     </section>
 
     <section class="manual-module" id="c-lottery" style="--c: #EA580C">
@@ -432,14 +451,16 @@
 
     <section class="manual-module" id="c-tarjetas" style="--c: #3B5BDB">
       <div class="manual-module-head"><span class="manual-kicker">Controles</span><h2>Tarjetas y Cupones</h2></div>
-      <p class="manual-lede">Lo vendido con tarjeta contra lo que acredita J.H. en cupones (tarda unas 72 hs).</p>
+      <p class="manual-lede">Lo vendido con tarjeta que J.H. todavía no acreditó al cierre del mes. Es el saldo de la cuenta 1.03.02 de Ratio, para la conciliación.</p>
       {{ shot('tarjetas', 'Tarjetas y Cupones') }}
       <ol class="manual-steps">
-        <li><span class="n">1</span><p>Cómo está el mes. Alerta si lo pendiente pasa de $15,000 (sin los pagos de Kia y Toyota).</p></li>
-        <li><span class="n">2</span><p>Pendiente de acreditar, día por día.</p></li>
-        <li><span class="n">3</span><p>El estado de cada día.</p></li>
+        <li><span class="n">1</span><p><b>Pendiente de acreditar</b> al último día del mes. Tocalo para ver los DDC que lo forman.</p></li>
+        <li><span class="n">2</span><p><b>Ingresos loyalty Chevron</b> del mes (asiento 1.03.02 / 4.11). Tocalo para ver el detalle.</p></li>
+        <li><span class="n">3</span><p>Vendido sin DDC: los DDC que J.H. depositó después del cierre con ventas del mes.</p></li>
+        <li><span class="n">4</span><p>DDC sin aplicar en un EFT al cierre, y en qué EFT se aplicaron después.</p></li>
+        <li><span class="n">5</span><p><b>Exportar PDF</b>: el pendiente con su detalle.</p></li>
       </ol>
-      <div class="manual-tip"><b>Tené en cuenta:</b> necesita los cupones de J.H. al día. Más abajo: EFT, facturas y cupones contra Chase.</div>
+      <div class="manual-tip"><b>Tené en cuenta:</b> necesita los cupones y el detalle de cupones de J.H. al día. Más abajo, <b>EFT del mes</b>: cada EFT contra el reporte de J.H. y contra Chase.</div>
     </section>
 
     <section class="manual-module" id="c-depositos" style="--c: #65A30D">
@@ -449,9 +470,9 @@
       <ol class="manual-steps">
         <li><span class="n">1</span><p>Si todo lo cargado está en Chase.</p></li>
         <li><span class="n">2</span><p><b>Todo junto</b>: por tipo, los papeles contra Chase.</p></li>
-        <li><span class="n">3</span><p>Lo que está en Chase sin recibo cargado. Es un aviso, no un error.</p></li>
+        <li><span class="n">3</span><p>Un depósito de Chase sin recibo cargado aparece en su cuadro como "Sin recibo". Es un aviso, no un error.</p></li>
       </ol>
-      <div class="manual-tip"><b>Tené en cuenta:</b> se controla hasta el último día de Chase cargado.</div>
+      <div class="manual-tip"><b>Tené en cuenta:</b> cada cuadro cierra con el total de recibos y el total en Chase. Se controla hasta el último día de Chase cargado. El Payment Summary de Cantaloupe no es efectivo: no entra acá.</div>
     </section>
 
     <section class="manual-module" id="c-cmv" style="--c: #7C3AED">
@@ -465,16 +486,36 @@
       </ol>
     </section>
 
+    <section class="manual-module" id="c-combustible" style="--c: #92400E">
+      <div class="manual-module-head"><span class="manual-kicker">Controles</span><h2>Combustible</h2></div>
+      <p class="manual-lede">El stock de galones contra el inventario real de los tanques, el margen por galón y la hoja Fisico del Cierre.</p>
+      {{ shot('control-combustible', 'Control de combustible') }}
+      <ol class="manual-steps">
+        <li><span class="n">1</span><p>En galones y en $: inventario inicial + recibido de J.H. − vendido = final teórico. Abajo, el final real y la diferencia (teórico − real).</p></li>
+        <li><span class="n">2</span><p><b>Editar inventario inicial</b> y <b>Editar inventario final real</b> (por tanque, T1 y T2): se corrigen ahí mismo.</p></li>
+        <li><span class="n">3</span><p>Por galón: precio de venta (Venta Combustible + REBATE GETTEL, dividido los galones, como el Bce), PPP y margen. Tocá un número subrayado para ver la cuenta.</p></li>
+        <li><span class="n">4</span><p>La hoja Fisico del mes: las facturas, el Total Compras y el cierre con las ventas al PPP.</p></li>
+        <li><span class="n">5</span><p><b>Fotos del inventario final</b>: subí las fotos o el PDF del ticket "Inventory Report". Se enderezan y se leen solas, y el volumen de cada tanque pasa al inventario final real.</p></li>
+      </ol>
+      <div class="manual-tip"><b>Tené en cuenta:</b>
+        <ul>
+          <li>Una foto que no se lee con seguridad no carga nada: completá el final real a mano (paso 2).</li>
+          <li>Las facturas se cargan en Carga de Datos → Combustible.</li>
+        </ul>
+      </div>
+    </section>
+
     <section class="manual-module" id="c-kia" style="--c: #0D9488">
       <div class="manual-module-head"><span class="manual-kicker">Controles</span><h2>Kia y Toyota</h2></div>
-      <p class="manual-lede">Cuánto debe cada concesionaria: lo que cargó con vales menos lo que pagó.</p>
+      <p class="manual-lede">Cuánto debe cada concesionaria (lo que cargó con vales menos lo que pagó) y el cierre del mes de cada una, como el Cierre y Ratio.</p>
       {{ shot('kia-toyota', 'Kia y Toyota') }}
       <ol class="manual-steps">
         <li><span class="n">1</span><p><b>Kia</b>: cuánto debe o tiene a favor hoy, y la cuenta del mes.</p></li>
         <li><span class="n">2</span><p><b>Toyota</b>: lo mismo.</p></li>
-        <li><span class="n">3</span><p>Los movimientos del mes, día por día.</p></li>
+        <li><span class="n">3</span><p>Lo que se le cobra a cada una en el mes: vales, menos el rebate, más el recargo de la tarjeta (3%). Debajo, lo que pagó cada una.</p></li>
+        <li><span class="n">4</span><p>Los asientos del mes, REBATE GETTEL y COBRO GETTEL-KIA, con las cuentas de Ratio.</p></li>
       </ol>
-      <div class="manual-tip"><b>Tené en cuenta:</b> se carga en Carga de Datos → Gettel / Toyota.</div>
+      <div class="manual-tip"><b>Tené en cuenta:</b> más abajo están los movimientos del mes día por día y el historial mes a mes. Se carga en Carga de Datos → Gettel / Toyota.</div>
     </section>
 
     <section class="manual-module" id="c-productos" style="--c: #DB2777">
@@ -489,18 +530,62 @@
     </section>
 
     <section class="manual-module" id="c-ventas" style="--c: #B45309">
-      <div class="manual-module-head"><span class="manual-kicker">Controles</span><h2>Ventas y costos</h2></div>
-      <p class="manual-lede">Lo vendido de cada producto, mes por mes, contra el costo de su última compra.</p>
-      {{ shot('ventas-costos', 'Ventas y costos') }}
+      <div class="manual-module-head"><span class="manual-kicker">Controles</span><h2>Ventas y Costos</h2></div>
+      <p class="manual-lede">Los productos cuyo margen cambió de forma notoria: el precio de venta (Elistar) contra el costo de su última compra. Sirve para decidir si hay que hablar con el manager.</p>
+      {{ shot('ventas-costos', 'Ventas y Costos') }}
       <ol class="manual-steps">
-        <li><span class="n">1</span><p>Elegí Desde y Hasta → <b>Ver</b>.</p></li>
-        <li><span class="n">2</span><p>Cuántos productos subieron de costo, de precio, etc.</p></li>
-        <li><span class="n">3</span><p><b>Filtros</b>: por producto o departamento. Tocá un nombre para ver sus compras.</p></li>
+        <li><span class="n">1</span><p>Elegí Desde, Hasta y desde cuántos puntos de margen mostrar → <b>Ver</b>.</p></li>
+        <li><span class="n">2</span><p>Cuántos subieron de costo y no de precio, etc. Tocá uno para ver solo esos.</p></li>
+        <li><span class="n">3</span><p><b>Mail a Rick</b>: arma el mail con los productos tildados en la columna "Mail". Revisalo y mandalo vos.</p></li>
+        <li><span class="n">4</span><p><b>Filtros</b>: por producto o departamento. Tocá un nombre para ver sus compras.</p></li>
       </ol>
+    </section>
+
+    <!-- ================= PANEL DE PROYECCIONES ================= -->
+    <div class="manual-section-heading">
+      <span class="manual-part">Arriba, en todas las páginas</span>
+      <h2>Panel de proyecciones</h2>
+      <p>Cómo cerraría el mes al ritmo de los días cargados. Se abre con el botón <b>Panel de proyecciones</b> de la barra de arriba. No se carga nada, salvo el Bce del mes cerrado.</p>
+    </div>
+
+    <section class="manual-module" id="proyecciones" style="--c: #7A6BB0">
+      <div class="manual-module-head"><span class="manual-kicker">Panel de proyecciones</span><h2>Proyecciones</h2></div>
+      <p class="manual-lede">Lo vendido hasta hoy y lo proyectado a fin de mes, como la hoja Store Info del Excel Cierre con los días reales del mes.</p>
+      {{ shot('proyecciones', 'Proyecciones') }}
+      <ol class="manual-steps">
+        <li><span class="n">1</span><p>Elegí el mes. La barra dice cuántos días tienen el Close Store cargado.</p></li>
+        <li><span class="n">2</span><p><b>Utilidad neta proyectada</b>. Tocala (Ver desglose) para el detalle.</p></li>
+        <li><span class="n">3</span><p>La venta proyectada de combustible y del C-Store.</p></li>
+        <li><span class="n">4</span><p>La utilidad bruta de cada unidad y de cada rubro del C-Store. Lottery es la comisión real de las semanas que se pagan en el mes.</p></li>
+      </ol>
+      {{ shot('proyecciones-rubro', 'C-Store por rubro y Control contra el Balance') }}
+      <ol class="manual-steps" start="5">
+        <li><span class="n">5</span><p>C-Store por rubro: lo vendido, el % teórico de utilidad y lo proyectado. El % de cada rubro se puede cambiar.</p></li>
+        <li><span class="n">6</span><p><b>Guardar %</b> después de cambiarlo.</p></li>
+        <li><span class="n">7</span><p><b>Control contra el Balance</b>: con el mes cerrado, subí el Excel del Bce (hoja BALANCE HISTORICO). Se ve lo real al lado de lo proyectado.</p></li>
+      </ol>
+      <div class="manual-tip"><b>Tené en cuenta:</b> Kia / Toyota no entra en la utilidad: es combustible a cuenta, no ganancia.</div>
+    </section>
+
+    <section class="manual-module" id="utilidad-neta" style="--c: #7A6BB0">
+      <div class="manual-module-head"><span class="manual-kicker">Panel de proyecciones</span><h2>Utilidad neta</h2></div>
+      <p class="manual-lede">La utilidad bruta menos todos los gastos del mes, renglón por renglón como el Estado de Resultado del Bce.</p>
+      {{ shot('utilidad-neta', 'Utilidad neta') }}
+      <ol class="manual-steps">
+        <li><span class="n">1</span><p>Utilidad bruta, gastos y utilidad neta: proyectado y hasta hoy.</p></li>
+        <li><span class="n">2</span><p>El desglose: cada renglón con de dónde sale (Close Store, Chase, Caja, Cupones, Lottery).</p></li>
+      </ol>
+      <div class="manual-tip"><b>Tené en cuenta:</b>
+        <ul>
+          <li>Lo que se paga una vez por mes (luz, agua, seguro, internet, alarma, teléfono, Elistar) toma lo real si ya se pagó y, si no, lo del mes anterior.</li>
+          <li>Un débito de Chase sin categoría va a "Sin categoría en Chase". Categorizalo en Chase para que vaya a su renglón.</li>
+          <li>Con el Bce del mes cargado, aparece la columna con lo real.</li>
+        </ul>
+      </div>
     </section>
   </div>
 </div>
-<p class="manual-footnote">Manual actualizado el 15/10/2026.</p>
+<p class="manual-footnote">Manual actualizado el 11/11/2026.</p>
 <style>
   .manual-page { max-width: none; }
   .manual-shell {
