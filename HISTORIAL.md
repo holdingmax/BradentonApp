@@ -2893,3 +2893,39 @@ Texto completo, sin cambios, de la sección "Estado actual" de `CLAUDE.md` hasta
     - CEC 1906438, que no se guardó en dos intentos.
   - Facturas varias: SI-201830 (VPN de $7) quedó como "Mako Network Fee".
   - Proveedores quedó frenado, con ~60 facturas de julio a noviembre sin cargar. Lottery, Gettel/Toyota, Cheques y Horas siguen sin cargar; Horas no se carga por G1.
+
+## 2026-11-12: chat Bradenton9 (revisión de seguridad y velocidad; arreglos sin cambios a la vista)
+- **Pedido**: antes de seguir con las fallas de la carga en producción, revisar todo el código buscando fallas de seguridad, lentitud y desprolijidades, y arreglar lo que no cambie el funcionamiento. Hallazgos en `AUDITORIA_2026-11.md`.
+- **Cómo se revisó**:
+  - Dos revisores en solo lectura (rutas de `webapp.py`; SQL de los `*_db.py` y XSS de las 82 plantillas). Sin hallazgos altos: no hay inyección SQL ni XSS por un documento subido.
+  - Velocidad medida con el test client en las 345 páginas GET (las de `comparar_bases.PAGES` más las rutas sin argumentos), contando conexiones y consultas con `db.connect` envuelto y `set_trace_callback`.
+  - Cada cambio se comparó byte a byte contra la salida de antes en las 345 páginas (scripts `capture.py` y `compare.py` del scratchpad, sobre una copia del SQLite): iguales.
+- **Seguridad** (pedido de Alfonso: S1, S2, S5 y S6; lo de los usuarios, S3 y S4, queda como está a propósito):
+  - S1: las capturas de `static/manual/` piden sesión (`webapp._is_manual_image`, con la ruta normalizada).
+  - S2: `webapp._security_headers`: `no-store`, `nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, HSTS en Render; `static` con caché de una hora.
+  - S5: `auth._USERS_LOCK` alrededor de leer, cambiar y guardar los usuarios; el hash se calcula antes.
+  - S6: `InvalidUpload` con `errorhandler` (un nombre de archivo que el disco no acepta avisa en vez de dar 500) y `webapp._exc_text` en los 36 `Error: {exc}`.
+- **Velocidad** (mismos números en todas las páginas):
+  - Cupones (`eft_db.get_cupones_with_status` y `backfill_grouped_cupones_from_eft`): una consulta por cupón pasó a una o dos en total. Con 12.100 cupones (10 veces los de hoy), 0,18 s contra 26 s.
+  - Encadenado de meses de Caja y Físico: `month_chain.py`. Se corta en el primer mes con datos (antes, siempre 60 meses) y el mes calculado se recuerda mientras dura un GET.
+  - Kia y Toyota (`webapp._kia_toyota_ledger`): cuatro consultas por mes desde el primer cargo pasaron a cinco para todo el rango.
+  - Chase: `config_store.batch_reads()` en la subida del extracto y en la recategorización.
+  - Usuarios: `auth.load_users` recuerda lo leído 5 segundos (guardar lo descarta). En Postgres era una conexión por pedido.
+  - `fisico_db.get_month_invoices`: el detalle por grado en la misma conexión.
+  - Resultado en la PC: 11.994 → 1.931 conexiones y 85 → 44 s en las 345 páginas. Proyecciones 5,4 → 0,2 s; Caja sin saldo a mano 1,9 → 0,07 s.
+- **Estilos de `base.html` a `static/base.css`** (V6, solo el CSS, decisión de Alfonso):
+  - `webapp.static_url` agrega `?v=<fecha del archivo>` y `_security_headers` guarda un año lo que lleva `v`.
+  - En la página queda `<style>:root { --accent… }</style>` después del enlace (el color de cada módulo).
+  - `login.html` no usa `base.html`: no cambia.
+  - Comprobado con `verify_css.py` del scratchpad (217 páginas iguales reponiendo el bloque) y en el navegador, comparando los estilos calculados de los 1.944 elementos de Caja antes y después.
+- **Sin hacer**: el JavaScript de `base.html` (90 KB, ahí vive el guardado sin recargar), I1 (tope global de OCR, va con los 502 de Proveedores), I2 (servidor de producción), I3 (versiones fijas).
+- **Trampas**:
+  - Un parche por bash con heredoc convirtió `"\x00"` en un byte nulo dentro de `webapp.py`. Los parches largos van en un archivo `.py` del scratchpad (con el editor) y se corren desde ahí.
+  - Los `*_db.py` tienen fin de línea LF y `webapp.py`, `caja.py`, `fisico.py` CRLF: al parchear por script, detectar el fin de línea del archivo.
+  - `copy.deepcopy` de un `object()` centinela devuelve otro objeto: el centinela de `month_chain` es un texto.
+- **Docker y Postgres local** (12/11):
+  - Alfonso instaló WSL2 (`wsl --install --no-distribution` como admin y reinicio) y Docker Desktop arrancó.
+  - El puerto 55432 quedó dentro de un rango que Windows reserva para WSL2 (`netsh interface ipv4 show excludedportrange protocol=tcp`; cambia en cada arranque): `bradenton-pg` pasó a **127.0.0.1:15432** (`.env.docker-local`, CLAUDE.md, PLAN_POSTGRES.md). El contenedor es `postgres:17` con el volumen `bradenton-pg-data` y `--restart unless-stopped`.
+  - Datos: `db.upgrade_schema()` y `migrar_sqlite_a_postgres.py todos --origen <copia>` (todo idéntico).
+  - En Git Bash, `docker run -v volumen:/ruta` necesita `MSYS_NO_PATHCONV=1`.
+- **Probado**: `python -m pytest` (84 pasan; pruebas nuevas en `tests/test_seguridad_y_velocidad.py`); las 345 páginas iguales en SQLite contra el código anterior, en Postgres contra el código anterior y entre SQLite y Postgres; cupones, completado de cupones y categorías de Chase iguales contra el código anterior. En Postgres, 218 → 56 s en total y 43.694 → 4.312 consultas. **Sin probar**: los lectores (no se tocaron).
