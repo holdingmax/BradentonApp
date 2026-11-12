@@ -2853,3 +2853,43 @@ Texto completo, sin cambios, de la sección "Estado actual" de `CLAUDE.md` hasta
   - Los dos detalles se abren abajo sin mover la pantalla y abrir uno cierra el otro.
 - **Combustible** (3b89fde): `control_combustible.build_control(year, month, other_income)` suma el REBATE GETTEL del mes (`cuenta_kia_toyota.month_closing`) al precio de venta, a los dos márgenes y al precio de cada tramo del margen con última compra.
 - **Abierto**: el REBATE GETTEL de septiembre da 636.32 en la app (con la base de la PC al 22/10) contra 755.16 en Ratio; por eso el precio da 4.2368 y no 4.2396.
+
+## 2026-11-11 a 12: chat Bradenton8 (manual al día; Cancelar carga; "!" de los Close Store para revisar)
+- **Manual de usuario al día** (b140ff8):
+  - Pedido del usuario: cada cambio visible actualiza también `templates/manual.html` (texto, captura y marcas rojas) en el mismo commit. Quedó como regla en CLAUDE.md ("Cómo trabajar") y en la memoria `feedback_manual_al_dia`.
+  - Se rehicieron 32 capturas y se sumaron Control de combustible y el Panel de proyecciones (Proyecciones, por rubro, utilidad neta).
+  - Herramientas en `Claude outputs/herramientas_manual/` (snap → shot → annotate; `LEEME.txt` con las URLs y las trampas):
+    - El snap necesita `users.json` en la copia de datos.
+    - En Proyecciones hay que sacar la animación del snap.
+    - `probe.js` va dentro del snap: si se le cambia el selector, rehacer snap y shot.
+- **Cancelar carga y fotos del inventario** (e1eac13):
+  - Los botones "Cancelar carga" (`base.html`) tienen aire arriba y abajo.
+  - En Combustible, `.cb-photo-form button {margin:0}` los pegaba al texto: se arregló con un selector de dos clases.
+  - Las dos fotos del inventario real se abren del mismo tamaño.
+- **"!" de los Close Store para revisar** (896b4d2, migración 0027):
+  - Cada carga guarda por día lo que no se pudo leer o no cerró en `daily_report_review`: departamentos dudosos o sin leer, la suma contra el total impreso, Store Info sin leer o que no cierra, y ONLINE/SKOFF de Lottery.
+  - `reporte_diario.extract_department_sales_for_day` devuelve además `doubtful_items`. Las salidas esperadas de los lectores se regeneraron para Close Store 07-09 y 20-09: solo cambió esa clave, vacía.
+  - En Ventas por Departamento, el día muestra un "!" a la derecha, con el detalle al pasar el mouse.
+  - En `/reporte/dia/<fecha>`:
+    - Un cuadro rojo "Revisá este día", con el link al día en Lottery cuando falta ONLINE/SKOFF.
+    - Los renglones, los campos y la caja del total impreso en rojo.
+  - Guardar cada parte borra su marca (`reportes_db.clear_review_section`); sin marcas, se va el "!".
+- **"Buscar días para revisar"** (25f376f):
+  - Botón en Ventas por Departamento para los meses cargados antes de que existiera el "!".
+  - `webapp._review_from_saved` saca lo mismo de lo guardado: lo dudoso quedó en NULL y el total impreso está en `daily_reports`. Una marca de la carga se respeta.
+  - En la copia de la PC marcó 3 días de unidades que no dan el total impreso (04/08, 19/08, 24/09) y muchos de julio y agosto sin total impreso: son de antes de que el total se guardara solo.
+- **Probado**: 8 Close Store reales de octubre en la copia (ninguno dio advertencia) y una marca de prueba en el 10/09. Sin probar: la migración 0027 en Postgres (Docker sin WSL2).
+- **Informe de la carga en producción** (chat 27, 11/11; no revisado todavía):
+  - Close Store de julio al 09/11 iguales al Excel de Ventas, salvo dos días:
+    - 05/07 se guarda sin departamentos, aun resubido.
+    - 20/07: Tabacco da $990 contra $1,464 del Excel.
+  - Render se reinició 8 a 10 veces (502), probablemente por falta de memoria con el OCR:
+    - Coca-Cola 53252357026 y 53447041007 se traban en "1 de 3".
+    - Un lote de 4 facturas chicas (Flori-Gas 1762591, Frito-Lay 12442174, GCE 784010 y 787394-787395) tampoco se guardó.
+  - Proveedores que no se cargan:
+    - Bimbo 51643990006757.
+    - 51643990007976 ("proveedor no reconocido").
+    - Colonial 2088231.
+    - CEC 1906438, que no se guardó en dos intentos.
+  - Facturas varias: SI-201830 (VPN de $7) quedó como "Mako Network Fee".
+  - Proveedores quedó frenado, con ~60 facturas de julio a noviembre sin cargar. Lottery, Gettel/Toyota, Cheques y Horas siguen sin cargar; Horas no se carga por G1.
