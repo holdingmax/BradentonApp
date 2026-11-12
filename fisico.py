@@ -49,6 +49,7 @@ import calendar
 from datetime import date, datetime
 
 import fisico_db
+import month_chain
 import reportes_db
 
 
@@ -61,7 +62,12 @@ def _month_volume_actual(year, month):
 _MAX_CHAIN_MONTHS = 60  # tope de meses hacia atrás al encadenar (evita recursión sin fin)
 
 
-def _resolve_initial(year, month, _depth=0):
+def _first_data_month():
+    """El primer mes con facturas o ajustes de Físico (ver month_chain)."""
+    return month_chain.cached(("fisico.first_month",), lambda: month_chain.earliest(fisico_db.earliest_data()))
+
+
+def _resolve_initial(year, month, _depth=0, _first_month=None):
     """
     (gallons, amount, source) del Inventario Inicial Teórico -- mismo
     patrón que caja._resolve_opening_balance: un override manual de ESTE
@@ -78,8 +84,16 @@ def _resolve_initial(year, month, _depth=0):
     if _depth >= _MAX_CHAIN_MONTHS:
         return 0.0, 0.0, "default"
 
+    # Sin nada cargado antes de este mes, el mes anterior no tiene datos y
+    # el inicial es 0: no hace falta calcularlo (antes se recalculaban siempre
+    # 60 meses hacia atrás; V1 de AUDITORIA_2026-11.md).
+    if _first_month is None:
+        _first_month = [_first_data_month()]
+    if month_chain.nothing_before(_first_month[0], year, month):
+        return 0.0, 0.0, "default"
+
     prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
-    prev_report = build_month_report(prev_year, prev_month, _depth=_depth + 1)
+    prev_report = build_month_report(prev_year, prev_month, _depth=_depth + 1, _first_month=_first_month)
     if prev_report["has_any_data"]:
         return (
             prev_report["final_teorico_gallons"],
@@ -89,11 +103,22 @@ def _resolve_initial(year, month, _depth=0):
     return 0.0, 0.0, "default"
 
 
-def build_month_report(year, month, _depth=0):
+def build_month_report(year, month, _depth=0, _first_month=None):
+    # El mismo mes pedido varias veces en una página (Proyecciones, el
+    # encadenado de los meses siguientes) se calcula una sola vez.
+    return month_chain.cached(
+        ("fisico.month_report", year, month),
+        lambda: _build_month_report(year, month, _depth, _first_month),
+    )
+
+
+def _build_month_report(year, month, _depth, _first_month):
     invoices = fisico_db.get_month_invoices(year, month)
     settings = fisico_db.get_month_settings(year, month)
 
-    initial_gallons, initial_amount, initial_source = _resolve_initial(year, month, _depth=_depth)
+    initial_gallons, initial_amount, initial_source = _resolve_initial(
+        year, month, _depth=_depth, _first_month=_first_month
+    )
 
     invoices_gallons = round(sum(inv["gallons"] or 0.0 for inv in invoices), 2)
     invoices_amount = round(sum(inv["amount"] or 0.0 for inv in invoices), 2)

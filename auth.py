@@ -6,18 +6,29 @@ Pure data layer — permission checks (who's allowed to create/reset/delete
 users) live in webapp.py's routes, not here.
 """
 
+import threading
+import time
+
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import config_store
 
+# Los usuarios se guardan enteros (leer todos, cambiar uno, guardar todos):
+# con este candado dos cambios a la vez no se pisan (S5 de
+# AUDITORIA_2026-11.md). El hash de la contraseña, que es lo lento, se calcula
+# antes de tomarlo.
+_USERS_LOCK = threading.RLock()
 
-def load_users():
-    """Return {username: {"password_hash": str, "is_admin": bool}}.
+# Cada pedido de la página consulta el usuario de la sesión, y con PostgreSQL
+# eso era una conexión y dos consultas por pedido (V5). Lo leído vale unos
+# segundos; guardar desde la app lo descarta al instante, así un alta, una
+# baja o un cambio de contraseña rigen enseguida. Solo un cambio hecho a mano
+# en la base o en el archivo tarda esos segundos en verse.
+_CACHE_SECONDS = 5
+_cache = None  # (momento, usuarios)
 
-    Sin usuarios guardados, {}. Si están pero no se pueden leer (archivo
-    roto, base caída) da error y no deja entrar a nadie: nunca se toma como
-    "no hay usuarios", que reabriría /primer-admin (A1 de AUDITORIA_2026-10.md).
-    """
+
+def _read_users():
     users = config_store.read(config_store.USERS)
     if users is None:
         return {}
@@ -26,13 +37,37 @@ def load_users():
     return users
 
 
+def load_users():
+    """Return {username: {"password_hash": str, "is_admin": bool}}.
+
+    Sin usuarios guardados, {}. Si están pero no se pueden leer (archivo
+    roto, base caída) da error y no deja entrar a nadie: nunca se toma como
+    "no hay usuarios", que reabriría /primer-admin (A1 de AUDITORIA_2026-10.md).
+    Lo devuelto es solo para leer; para cambiar algo, _read_users con el candado.
+    """
+    global _cache
+    cached = _cache
+    now = time.monotonic()
+    if cached is not None and now - cached[0] < _CACHE_SECONDS:
+        return cached[1]
+    users = _read_users()
+    _cache = (now, users)
+    return users
+
+
 def save_users(users):
     """Persist the full user dict (temp file + os.replace en la PC; una transacción en Postgres)."""
-    config_store.write(config_store.USERS, users)
+    global _cache
+    with _USERS_LOCK:
+        try:
+            config_store.write(config_store.USERS, users)
+        finally:
+            _cache = None
 
 
 def has_users():
-    return bool(load_users())
+    # Siempre de lo guardado, sin la memoria: de esto depende /primer-admin.
+    return bool(_read_users())
 
 
 def get_user(username):
@@ -70,11 +105,17 @@ def create_user(username, password, is_admin=False, must_change_password=True):
         raise ValueError("El usuario no puede estar vacío.")
     if not password:
         raise ValueError("La contraseña no puede estar vacía.")
-    users = load_users()
-    if username in users:
-        raise ValueError(f'Ya existe un usuario "{username}".')
+    password_hash = generate_password_hash(password)
+    with _USERS_LOCK:
+        users = _read_users()
+        if username in users:
+            raise ValueError(f'Ya existe un usuario "{username}".')
+        _add_user(users, username, password_hash, is_admin, must_change_password)
+
+
+def _add_user(users, username, password_hash, is_admin, must_change_password):
     users[username] = {
-        "password_hash": generate_password_hash(password),
+        "password_hash": password_hash,
         "is_admin": bool(is_admin),
         # La contraseña la eligió el admin, no la persona -- se le exige
         # cambiarla ella misma la primera vez que entre (pedido explícito
@@ -93,26 +134,29 @@ def set_password(username, new_password, must_change_password=False):
     siempre lo deja en False."""
     if not new_password:
         raise ValueError("La contraseña no puede estar vacía.")
-    users = load_users()
-    if username not in users:
-        raise ValueError(f'No existe el usuario "{username}".')
-    users[username]["password_hash"] = generate_password_hash(new_password)
-    users[username]["must_change_password"] = bool(must_change_password)
-    save_users(users)
+    password_hash = generate_password_hash(new_password)
+    with _USERS_LOCK:
+        users = _read_users()
+        if username not in users:
+            raise ValueError(f'No existe el usuario "{username}".')
+        users[username]["password_hash"] = password_hash
+        users[username]["must_change_password"] = bool(must_change_password)
+        save_users(users)
 
 
 def delete_user(username, current_username=None):
     """Remove a user — refuses to delete yourself or the last remaining admin."""
-    users = load_users()
-    if username not in users:
-        raise ValueError(f'No existe el usuario "{username}".')
-    if username == current_username:
-        raise ValueError("No podés eliminar tu propia cuenta mientras estás conectado con ella.")
-    other_admins = [
-        name for name, data in users.items()
-        if data.get("is_admin") and name != username
-    ]
-    if users[username].get("is_admin") and not other_admins:
-        raise ValueError("No se puede eliminar el último administrador.")
-    del users[username]
-    save_users(users)
+    with _USERS_LOCK:
+        users = _read_users()
+        if username not in users:
+            raise ValueError(f'No existe el usuario "{username}".')
+        if username == current_username:
+            raise ValueError("No podés eliminar tu propia cuenta mientras estás conectado con ella.")
+        other_admins = [
+            name for name, data in users.items()
+            if data.get("is_admin") and name != username
+        ]
+        if users[username].get("is_admin") and not other_admins:
+            raise ValueError("No se puede eliminar el último administrador.")
+        del users[username]
+        save_users(users)

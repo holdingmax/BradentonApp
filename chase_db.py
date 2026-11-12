@@ -530,6 +530,16 @@ def get_month_transactions(year, month):
         conn.close()
 
 
+def earliest_date():
+    """La fecha del movimiento más viejo cargado (None si no hay ninguno)."""
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT MIN(posting_date) AS first_date FROM chase_transactions").fetchone()
+    finally:
+        conn.close()
+    return row["first_date"] if row else None
+
+
 def get_available_years():
     """
     Años distintos con al menos un movimiento guardado -- pedido explícito

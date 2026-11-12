@@ -22,6 +22,7 @@ import os
 from datetime import date, datetime
 
 import db
+import month_chain
 
 _BASE_DIR = app_paths.DATA_DIR
 _DB_PATH = os.path.join(_BASE_DIR, "gettel_toyota.db")
@@ -192,6 +193,23 @@ def get_month_days(year, month):
     return [dict(row) for row in rows]
 
 
+def get_days_in_months(first, last):
+    """Lo mismo que get_month_days de cada mes de `first` a `last` (pares
+    (año, mes)), uno atrás del otro, en una sola consulta."""
+    if first > last:
+        return []
+    start, end = month_chain.months_bounds(first, last)
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM gettel_toyota_days WHERE date >= ? AND date < ? ORDER BY date",
+            (start, end),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(row) for row in rows if month_chain.in_months(row["date"], first, last)]
+
+
 def get_month_gettel_amount(year, month):
     """Suma del Monto de Gettel del mes -- lo que alimenta la categoría "Gettel" del resumen mensual de Ventas por Departamento."""
     prefix = f"{year:04d}-{month:02d}-"
@@ -319,6 +337,23 @@ def get_month_pagos(year, month):
     finally:
         conn.close()
     return [dict(row) for row in rows]
+
+
+def get_pagos_in_months(first, last):
+    """Lo mismo que get_month_pagos de cada mes de `first` a `last` (pares
+    (año, mes)), uno atrás del otro, en una sola consulta."""
+    if first > last:
+        return []
+    start, end = month_chain.months_bounds(first, last)
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM gettel_pagos WHERE fecha >= ? AND fecha < ? ORDER BY fecha, pago_n, id",
+            (start, end),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(row) for row in rows if month_chain.in_months(row["fecha"], first, last)]
 
 
 def get_pago_years():

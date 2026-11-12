@@ -20,6 +20,7 @@ reportes_data/eft.db (gitignored, mismo directorio que las demás bases):
 """
 
 import calendar
+import functools
 import hashlib
 import app_paths
 import jh_mensual_db
@@ -317,8 +318,16 @@ def get_month_deposits(year, month):
 def _parse_eft_date(eft_date):
     if not eft_date:
         return None
+    return _parse_eft_text(str(eft_date))
+
+
+# Las fechas se guardan como texto y cada página las convierte miles de veces
+# (una o más por cupón y por línea de EFT): cada texto se convierte una sola
+# vez y se recuerda (V3 de AUDITORIA_2026-11.md; un datetime no se modifica).
+@functools.lru_cache(maxsize=50000)
+def _parse_eft_text(text):
     try:
-        return datetime.strptime(str(eft_date), "%m/%d/%Y")
+        return datetime.strptime(text, "%m/%d/%Y")
     except ValueError:
         return None
 
@@ -456,31 +465,27 @@ def backfill_grouped_cupones_from_eft():
     """
     conn = _connect()
     try:
-        candidates = conn.execute(
+        # Un mismo DDC suele pagarse en 2-4 líneas del EFT (una por factura
+        # SI-): hay que sumarlas todas, no tomar la primera (auditoría
+        # 2026-09, faltaban $68k de Net). Una sola consulta para todos los
+        # cupones en 0 que ya tienen un EFT (V3 de AUDITORIA_2026-11.md: antes
+        # era una consulta por cupón en 0, y los que nunca se completan se
+        # volvían a consultar en cada apertura de la página).
+        matches = conn.execute(
             """
-            SELECT coupon_id FROM cupones
-            WHERE reported_group_text IS NOT NULL AND gross = 0 AND fees = 0 AND net = 0
-            ORDER BY rowid
+            SELECT c.coupon_id, COUNT(*) AS n, SUM(ec.gross_amount) AS gross_amount,
+                   SUM(ec.fees_amount) AS fees_amount, SUM(ec.paid_amount) AS paid_amount
+            FROM cupones c JOIN eft_coupons ec ON ec.coupon = c.coupon_id
+            WHERE c.reported_group_text IS NOT NULL AND c.gross = 0 AND c.fees = 0 AND c.net = 0
+            GROUP BY c.coupon_id
+            ORDER BY c.coupon_id
             """
         ).fetchall()
         filled = 0
-        for row in candidates:
-            # Un mismo DDC suele pagarse en 2-4 líneas del EFT (una por
-            # factura SI-): hay que sumarlas todas, no tomar la primera
-            # (auditoría 2026-09, faltaban $68k de Net).
-            match = conn.execute(
-                """
-                SELECT COUNT(*) AS n, SUM(gross_amount) AS gross_amount,
-                       SUM(fees_amount) AS fees_amount, SUM(paid_amount) AS paid_amount
-                FROM eft_coupons WHERE coupon = ?
-                """,
-                (row["coupon_id"],),
-            ).fetchone()
-            if not match["n"]:
-                continue
+        for match in matches:
             conn.execute(
                 "UPDATE cupones SET gross = ?, fees = ?, net = ? WHERE coupon_id = ?",
-                (match["gross_amount"] or 0.0, match["fees_amount"] or 0.0, match["paid_amount"] or 0.0, row["coupon_id"]),
+                (match["gross_amount"] or 0.0, match["fees_amount"] or 0.0, match["paid_amount"] or 0.0, match["coupon_id"]),
             )
             filled += 1
         if filled:
@@ -488,6 +493,9 @@ def backfill_grouped_cupones_from_eft():
         return filled
     finally:
         conn.close()
+
+
+_MATCH_KEYS = ("id", "rcv_number", "eft_date", "gross_amount", "fees_amount", "paid_amount", "lines")
 
 
 def get_cupones_with_status(limit=None):
@@ -520,27 +528,37 @@ def get_cupones_with_status(limit=None):
         if limit:
             query += f" LIMIT {int(limit)}"
         cupones = conn.execute(query).fetchall()
+        # El cruce de todos los DDC en una sola consulta (V3 de
+        # AUDITORIA_2026-11.md): antes era una por cupón, sobre todos los
+        # cupones cargados, y cada mes cargado la hacía más lenta. Suma de
+        # todas las líneas del DDC; RCV/fecha de la última línea (la de mayor
+        # id: SQLite tomaba las columnas sueltas de la fila con MAX(id),
+        # Postgres no acepta columnas sueltas).
+        matches = {
+            match["coupon"]: match
+            for match in conn.execute(
+                """
+                SELECT a.coupon, a.id, ed.rcv_number, ed.eft_date,
+                       a.gross_amount, a.fees_amount, a.paid_amount, a.lines
+                FROM (
+                    SELECT ec.coupon AS coupon, MAX(ec.id) AS id,
+                           SUM(ec.gross_amount) AS gross_amount, SUM(ec.fees_amount) AS fees_amount,
+                           SUM(ec.paid_amount) AS paid_amount, COUNT(*) AS lines
+                    FROM eft_coupons ec JOIN eft_deposits ed ON ed.id = ec.deposit_id
+                    WHERE ec.coupon IS NOT NULL
+                    GROUP BY ec.coupon
+                ) a
+                JOIN eft_coupons ultima ON ultima.id = a.id
+                JOIN eft_deposits ed ON ed.id = ultima.deposit_id
+                ORDER BY a.coupon
+                """
+            ).fetchall()
+        }
         result = []
         for row in cupones:
-            match = conn.execute(
-                """
-                SELECT MAX(ec.id) AS id,
-                       (SELECT ed2.rcv_number FROM eft_coupons ec2 JOIN eft_deposits ed2 ON ed2.id = ec2.deposit_id
-                        WHERE ec2.coupon = ? ORDER BY ec2.id DESC LIMIT 1) AS rcv_number,
-                       (SELECT ed2.eft_date FROM eft_coupons ec2 JOIN eft_deposits ed2 ON ed2.id = ec2.deposit_id
-                        WHERE ec2.coupon = ? ORDER BY ec2.id DESC LIMIT 1) AS eft_date,
-                       SUM(ec.gross_amount) AS gross_amount, SUM(ec.fees_amount) AS fees_amount,
-                       SUM(ec.paid_amount) AS paid_amount, COUNT(*) AS lines
-                FROM eft_coupons ec JOIN eft_deposits ed ON ed.id = ec.deposit_id
-                WHERE ec.coupon = ?
-                """,
-                (row["coupon_id"], row["coupon_id"], row["coupon_id"]),
-            ).fetchone()
+            match = matches.get(row["coupon_id"])
             entry = dict(row)
-            # Suma de todas las líneas del DDC; RCV/fecha de la última línea
-            # (la de mayor id: SQLite tomaba las columnas sueltas de la fila
-            # con MAX(id), Postgres no acepta columnas sueltas).
-            entry["match"] = dict(match) if match and match["lines"] else None
+            entry["match"] = {key: match[key] for key in _MATCH_KEYS} if match is not None else None
             if entry["match"] is not None and entry["match"].get("paid_amount") is not None:
                 entry["diff"] = round((entry.get("net") or 0) - entry["match"]["paid_amount"], 2)
             else:
@@ -1224,6 +1242,11 @@ def _parse_cupon_date(value):
     text = str(value).strip()
     if not text:
         return None
+    return _parse_cupon_text(text)
+
+
+@functools.lru_cache(maxsize=50000)
+def _parse_cupon_text(text):
     for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y"):
         try:
             return datetime.strptime(text, fmt)

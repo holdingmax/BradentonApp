@@ -253,6 +253,19 @@ def get_month_expenses(year, month):
     }
 
 
+def earliest_data():
+    """Lo más viejo cargado, para cortar el encadenado de meses
+    (caja._resolve_opening_balance): la fecha del primer gasto y el primer
+    (año, mes) con un saldo guardado a mano."""
+    conn = _connect()
+    try:
+        expense = conn.execute("SELECT MIN(date) AS first_date FROM caja_expense_items").fetchone()
+        month = conn.execute("SELECT year, month FROM caja_months ORDER BY year, month LIMIT 1").fetchone()
+    finally:
+        conn.close()
+    return [expense["first_date"] if expense else None, (month["year"], month["month"]) if month else None]
+
+
 def get_expense_years():
     """
     Años distintos con al menos un gasto de Caja cargado a mano -- pedido

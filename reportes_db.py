@@ -20,6 +20,7 @@ from datetime import date, datetime
 import documents_db
 
 import db
+import month_chain
 
 _BASE_DIR = app_paths.DATA_DIR
 _DB_PATH = os.path.join(_BASE_DIR, "reportes_diarios.db")
@@ -663,6 +664,66 @@ def get_local_account_sales_by_date():
     finally:
         conn.close()
     return {row["date"]: round(row["amount"], 2) for row in rows if row["amount"]}
+
+
+def get_local_acct_in_months(first, last):
+    """{fecha: LOCAL ACCT del día} de cada día con Ventas por Departamento
+    entre los meses `first` y `last` (pares (año, mes)), en dos consultas
+    para todo el rango (Kia y Toyota lo pedía mes por mes). Un día con
+    departamentos pero sin LOCAL ACCT queda en 0."""
+    if first > last:
+        return {}
+    start, end = month_chain.months_bounds(first, last)
+    conn = _connect()
+    try:
+        days = conn.execute(
+            "SELECT DISTINCT date FROM daily_report_departments WHERE date >= ? AND date < ? ORDER BY date",
+            (start, end),
+        ).fetchall()
+        rows = conn.execute(
+            "SELECT date, amount FROM daily_report_departments "
+            "WHERE date >= ? AND date < ? AND department = ? ORDER BY date",
+            (start, end, "LOCAL ACCT"),
+        ).fetchall()
+    finally:
+        conn.close()
+    amounts = {}
+    for row in rows:
+        amounts.setdefault(row["date"], []).append(row["amount"])
+    return {
+        row["date"]: round(sum(amount or 0 for amount in amounts.get(row["date"], [])), 2)
+        for row in days if month_chain.in_months(row["date"], first, last)
+    }
+
+
+def get_store_info_local_accounts(first, last):
+    """[(fecha, Local Accounts)] de los días con Store Info entre los meses
+    `first` y `last` (pares (año, mes)), por fecha, en una sola consulta."""
+    if first > last:
+        return []
+    start, end = month_chain.months_bounds(first, last)
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT date, local_accounts FROM daily_reports "
+            "WHERE date >= ? AND date < ? AND store_info_source IS NOT NULL ORDER BY date",
+            (start, end),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [(row["date"], row["local_accounts"]) for row in rows if month_chain.in_months(row["date"], first, last)]
+
+
+def earliest_store_info_date():
+    """La fecha del Store Info más viejo cargado (None si no hay ninguno)."""
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT MIN(date) AS first_date FROM daily_reports WHERE store_info_source IS NOT NULL"
+        ).fetchone()
+    finally:
+        conn.close()
+    return row["first_date"] if row else None
 
 
 def get_month_store_info(year, month):

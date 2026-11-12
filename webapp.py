@@ -18,8 +18,10 @@ import json
 import app_paths
 import os
 import math
+import posixpath
 import re
 import shutil
+import sqlite3
 import tempfile
 import threading
 import time
@@ -281,6 +283,24 @@ def month_end_warnings_due(year, month, today=None):
 
 app.jinja_env.globals["month_end_warnings_due"] = month_end_warnings_due
 
+
+
+def static_url(filename):
+    """
+    La dirección de un archivo de static con la fecha del archivo al final
+    (?v=...): cuando el archivo cambia, cambia la dirección, así el navegador
+    lo puede guardar por mucho tiempo sin quedarse con una versión vieja
+    después de un deploy (V6 de AUDITORIA_2026-11.md, static/base.css).
+    """
+    try:
+        version = int(os.path.getmtime(os.path.join(app.static_folder, filename)))
+    except OSError:
+        version = 0
+    return url_for("static", filename=filename, v=version)
+
+
+app.jinja_env.globals["static_url"] = static_url
+
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 login_manager.login_message = "Iniciá sesión para continuar."
@@ -335,9 +355,20 @@ SESSION_IDLE_SECONDS = 30 * 60
 app.jinja_env.globals["SESSION_IDLE_SECONDS"] = SESSION_IDLE_SECONDS  # el aviso de base.html
 
 
+def _is_manual_image(view_args):
+    filename = posixpath.normpath(((view_args or {}).get("filename") or "").replace("\\", "/")).lower()
+    return filename == "manual" or filename.startswith("manual/")
+
+
 @app.before_request
 def require_login():
-    if request.endpoint in ("login", "primer_admin", "static") or request.endpoint is None:
+    if request.endpoint in ("login", "primer_admin") or request.endpoint is None:
+        return None
+    # Los archivos de static no piden sesión (el login los necesita), salvo
+    # las capturas del manual: muestran pantallas con datos del negocio (S1 de
+    # AUDITORIA_2026-11.md). Se mira la ruta ya normalizada, así
+    # "/static/./manual/x.png" no la esquiva.
+    if request.endpoint == "static" and not _is_manual_image(request.view_args):
         return None
     if not current_user.is_authenticated:
         return redirect(url_for("login"))
@@ -395,6 +426,41 @@ def _download_error_as_message(response):
     message_response = jsonify({"error": str(message), "level": "error" if category == "error" else "warning"})
     message_response.status_code = 409
     return message_response
+
+
+@app.after_request
+def _security_headers(response):
+    """
+    Cabeceras de seguridad y de caché (S2 de AUDITORIA_2026-11.md):
+    - las páginas y descargas no quedan guardadas en el navegador (en una PC
+      compartida, "atrás" después de salir mostraba pantallas con datos);
+    - los archivos de static sí se guardan una hora (un año los que llevan
+      la fecha en la dirección, ver static_url), así no se piden de nuevo en
+      cada página (las capturas del manual, solo en ese navegador);
+    - la app no se puede meter en un marco de otro sitio ni el navegador
+      adivina el tipo de un archivo; en Render, siempre por HTTPS.
+    """
+    headers = response.headers
+    headers.setdefault("X-Content-Type-Options", "nosniff")
+    headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    headers.setdefault("Referrer-Policy", "same-origin")
+    if os.environ.get("RENDER"):
+        headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    if request.endpoint == "static":
+        if response.status_code == 200:
+            scope = "private" if _is_manual_image(request.view_args) else "public"
+            # Con ?v= (static_url) la dirección cambia cuando cambia el
+            # archivo: se guarda un año. Sin él, una hora.
+            lifetime = "max-age=31536000, immutable" if request.args.get("v") else "max-age=3600"
+            headers["Cache-Control"] = f"{scope}, {lifetime}"
+    elif response.cache_control.max_age:
+        # Lo que la ruta pidió guardar (las fotos del inventario): solo en
+        # ese navegador, nunca en un proxy.
+        response.cache_control.public = False
+        response.cache_control.private = True
+    else:
+        headers["Cache-Control"] = "no-store"
+    return response
 
 
 # Endpoints alcanzables desde LOS DOS lados de la bifurcación Carga de
@@ -1222,6 +1288,37 @@ def _new_workspace_dir():
     return tempfile.mkdtemp(prefix="bradenton_web_")
 
 
+class InvalidUpload(ValueError):
+    """Un archivo subido que no se puede recibir (nombre inválido)."""
+
+
+@app.errorhandler(InvalidUpload)
+def _invalid_upload(exc):
+    return _error_response(str(exc))
+
+
+def _exc_text(exc):
+    """
+    El texto de un error para mostrarle al usuario (S6 de
+    AUDITORIA_2026-11.md). Los lectores avisan con mensajes propios y esos
+    salen tal cual; de lo inesperado se sacan las carpetas del servidor (queda
+    solo el nombre del archivo) y un error de la base va al log, no a la
+    pantalla.
+    """
+    if isinstance(exc, sqlite3.Error) or type(exc).__module__.split(".")[0] in ("psycopg", "psycopg_pool"):
+        print(f"[webapp] error de la base: {exc!r}")
+        return "no se pudo usar la base de datos. Probá de nuevo."
+    text = str(exc)
+    for folder in {_APP_TEMP_DIR, _SYSTEM_TEMP_DIR, app_paths.APP_DIR, app_paths.DATA_DIR}:
+        if not folder:
+            continue
+        # La carpeta como la escribe el sistema, con "/" y como sale en un repr.
+        for root in {folder, folder.replace("\\", "/"), folder.replace("\\", "\\\\")}:
+            text = re.sub(re.escape(root) + r"[\\/][^\s'\"]*",
+                          lambda m: re.split(r"[\\/]", m.group(0))[-1], text, flags=re.IGNORECASE)
+    return text
+
+
 def _save_upload_to_workspace(upload, workdir=None):
     """
     Save an uploaded file to a fresh (or given) temp dir; return its local path.
@@ -1235,12 +1332,18 @@ def _save_upload_to_workspace(upload, workdir=None):
     still strips any directory components a browser might send.
     """
     filename = os.path.basename(upload.filename.replace("\\", "/"))
-    if not filename or filename in (".", ".."):
-        raise ValueError("Nombre de archivo inválido.")
+    if not filename or filename in (".", "..") or "\x00" in filename:
+        raise InvalidUpload("Nombre de archivo inválido.")
     workdir = workdir or _new_workspace_dir()
     file_dir = tempfile.mkdtemp(dir=workdir)
     temp_path = os.path.join(file_dir, filename)
-    upload.save(temp_path)
+    try:
+        upload.save(temp_path)
+    except (OSError, ValueError) as exc:
+        # Un nombre que el disco no acepta (demasiado largo, caracteres
+        # prohibidos): se avisa, no un error 500 (S6 de AUDITORIA_2026-11.md).
+        print(f"[webapp] no se pudo guardar el archivo subido: {exc!r}")
+        raise InvalidUpload("No se pudo recibir el archivo: revisá su nombre.") from None
     return temp_path, filename
 
 
@@ -2060,7 +2163,7 @@ def _run_carga_datos_combustible_job(job_id, paths):
             notice=" ".join(parts), notice_level=level, redirect_url=redirect_url,
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 @app.route("/carga-datos/combustible/<int:invoice_id>/eliminar", methods=["POST"])
@@ -2295,7 +2398,7 @@ def _run_fisico_fotos_job(job_id, paths, year, month):
             redirect_url=f"/controles/combustible?year={year}&month={month}" if saved else None,
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 _fisico_backfill_running = set()
@@ -2501,7 +2604,7 @@ def _run_reporte_mensual_job(job_id, paths):
                           else "/carga-datos/reporte-mensual"),
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 def _pending_monthly_reports():
@@ -2577,7 +2680,7 @@ def _run_reporte_mensual_hoja_job(job_id, year, month, paths):
             redirect_url=f"/carga-datos/reporte-mensual?year={year}&month={month}",
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 @app.route("/carga-datos/reporte-mensual/editar", methods=["POST"])
@@ -2958,7 +3061,7 @@ def _run_carga_datos_reporte_diario_job(job_id, pdf_paths, origin="reporte"):
             notice=notice, notice_level=level, redirect_url=redirect_url,
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
     finally:
         prefetch.close()
 
@@ -3052,7 +3155,7 @@ def _run_monthly_upload_job(job_id, paths, read_and_save, done_prefix, redirect_
             redirect_url=redirect_for(*last) if last else fallback_url,
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 def _save_lottery_monthly_report(path):
@@ -3492,7 +3595,7 @@ def control_cierre_mensual():
                 ventas_path, _ventas_filename = _save_upload_to_workspace(ventas_upload, workdir=workdir)
                 pdf_path, _pdf_filename = _save_upload_to_workspace(pdf_upload, workdir=workdir)
             except Exception as exc:
-                flash(f"Error: {exc}", "error")
+                flash(f"Error: {_exc_text(exc)}", "error")
             else:
                 # Los dos chequeos se aíslan por separado -- un problema con
                 # el Excel de Ventas (o con la sección "Department Sales
@@ -3535,7 +3638,7 @@ def control_lottery_mensual():
                 pdf_path, _pdf_filename = _save_upload_to_workspace(pdf_upload, workdir=workdir)
                 result = check_lottery_monthly(lottery_path, pdf_path)
             except Exception as exc:
-                flash(f"Error: {exc}", "error")
+                flash(f"Error: {_exc_text(exc)}", "error")
     return render_template(
         "control_lottery_mensual.html", result=result, **THEME_BY_KEY["lottery_mensual"]
     )
@@ -3560,7 +3663,7 @@ def control_cupones():
                 eft_path, _eft_filename = _save_upload_to_workspace(eft_upload, workdir=workdir)
                 result = check_cupones_pending(mayor_path, eft_path)
             except Exception as exc:
-                flash(f"Error: {exc}", "error")
+                flash(f"Error: {_exc_text(exc)}", "error")
     return render_template("control_cupones.html", result=result, **THEME_BY_KEY["cupones"])
 
 
@@ -3583,7 +3686,7 @@ def control_mercaderia():
                 mayor_path, _mayor_filename = _save_upload_to_workspace(mayor_upload, workdir=workdir)
                 result = check_mercaderia_invoices(proveedores_path, mayor_path)
             except Exception as exc:
-                flash(f"Error: {exc}", "error")
+                flash(f"Error: {_exc_text(exc)}", "error")
     return render_template("control_mercaderia.html", result=result, **THEME_BY_KEY["mercaderia"])
 
 
@@ -3629,7 +3732,7 @@ def control_valuacion():
                 session["valuacion_download_path"] = result["download_path"]
                 session["valuacion_download_filename"] = result["download_filename"]
             except Exception as exc:
-                flash(f"Error: {exc}", "error")
+                flash(f"Error: {_exc_text(exc)}", "error")
     return render_template("control_valuacion.html", result=result, **THEME_BY_KEY["valuacion"])
 
 
@@ -3672,13 +3775,14 @@ def control_caja():
                 mayor_caja_path, _mayor_caja_filename = _save_upload_to_workspace(mayor_caja_upload, workdir=workdir)
                 session["caja_control_result"] = check_caja_mayores(cierre_path, mayor_chase_path, mayor_caja_path)
             except Exception as exc:
-                flash(f"Error: {exc}", "error")
+                flash(f"Error: {_exc_text(exc)}", "error")
         return redirect(url_for("control_caja"))
     result = session.pop("caja_control_result", None)
     return render_template("control_caja.html", result=result, **THEME_BY_KEY["caja"])
 
 
 @app.route("/carga-datos/chase", methods=["GET", "POST"])
+@config_store.batch_reads()  # las reglas se leen una vez, no por cada movimiento del extracto
 def chase():
     """
     Categoriza el extracto de Chase y lo guarda en chase_db.py -- ya NO
@@ -3760,6 +3864,7 @@ def _resolve_supplier_key_for_chase(description):
     return supplier_key
 
 
+@config_store.batch_reads()  # las reglas se leen una vez, no por cada movimiento guardado
 def _recategorize_all_chase_and_flash():
     """
     Recalcula Detalle y proveedor vinculado de TODOS los movimientos de
@@ -4328,7 +4433,7 @@ def _run_chase_cheques_job(job_id, pdf_paths):
             redirect_url="/carga-datos/chase/cheques",
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 def _check_already_loaded(item, filename):
@@ -4439,7 +4544,7 @@ def cmv_costo():
             update_master_costo_todos_bulk(master_path, dept_paths)
         )
     except Exception as exc:
-        return _error_response(f"Error: {exc}")
+        return _error_response(f"Error: {_exc_text(exc)}")
 
     notice = f"{failed_files} archivo(s) de departamento no se pudieron leer." if failed_files else None
     return _success_response(temp_xlsx_path, master_filename, notice=notice)
@@ -4460,7 +4565,7 @@ def cmv_ventas():
         sales_paths = _save_uploads_to_workspace(sales_uploads, workdir=workdir)
         _combined, temp_master_path, summary = process_monthly_sales(sales_paths, master_path)
     except Exception as exc:
-        return _error_response(f"Error: {exc}")
+        return _error_response(f"Error: {_exc_text(exc)}")
 
     # Un archivo o departamento problemático no aborta la carga (ver
     # monthly_sales.py) -- el resto se guarda igual, y el aviso se muestra
@@ -4533,7 +4638,7 @@ def gettel_cupones():
             if unmatched:
                 notice_parts.append(f"{len(unmatched)} día(s) del origen no matchearon ninguna fila en el destino.")
     except Exception as exc:
-        return _error_response(f"Error: {exc}")
+        return _error_response(f"Error: {_exc_text(exc)}")
 
     return _success_response(preview_path, master_filename, notice=" ".join(notice_parts) or None)
 
@@ -4553,7 +4658,7 @@ def gettel_pagos():
         pdf_paths = _save_uploads_to_workspace(pdf_uploads, workdir=workdir)
         preview_path, summary = process_gettel_pagos(master_path, pdf_paths)
     except Exception as exc:
-        return _error_response(f"Error: {exc}")
+        return _error_response(f"Error: {_exc_text(exc)}")
 
     notice_parts = []
     if summary.get("files_failed_to_parse"):
@@ -4773,7 +4878,7 @@ def reporte_ventas():
     try:
         temp_path, summary = process_reporte_diario(master_path, pdf_paths)
     except Exception as exc:
-        return _error_response(f"Error: {exc}")
+        return _error_response(f"Error: {_exc_text(exc)}")
 
     _persist_reporte_diario_departments(pdf_paths)
     _persist_lottery_department_fields(pdf_paths)
@@ -4791,7 +4896,7 @@ def reporte_store_info():
     try:
         temp_path, summary = process_store_info(master_path, pdf_paths)
     except Exception as exc:
-        return _error_response(f"Error: {exc}")
+        return _error_response(f"Error: {_exc_text(exc)}")
 
     _persist_reporte_diario_store_info(pdf_paths)
 
@@ -4853,7 +4958,7 @@ def _run_reporte_ventas_job(job_id, master_path, pdf_paths, master_filename):
             notice=_reporte_batch_notice(summary),
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 def _run_reporte_store_info_job(job_id, master_path, pdf_paths, master_filename):
@@ -4880,7 +4985,7 @@ def _run_reporte_store_info_job(job_id, master_path, pdf_paths, master_filename)
             notice=_reporte_batch_notice(summary),
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 @app.route("/reporte/ventas/async", methods=["POST"])
@@ -5760,7 +5865,7 @@ def lottery_sales_report():
     try:
         temp_path, summary = process_lottery(master_path, [], pdf_paths)
     except Exception as exc:
-        return _error_response(f"Error: {exc}")
+        return _error_response(f"Error: {_exc_text(exc)}")
 
     _persist_lottery_sales_report_fields(pdf_paths)
 
@@ -5777,7 +5882,7 @@ def lottery_department():
     try:
         temp_path, summary = process_lottery(master_path, pdf_paths, [])
     except Exception as exc:
-        return _error_response(f"Error: {exc}")
+        return _error_response(f"Error: {_exc_text(exc)}")
 
     _persist_lottery_department_fields(pdf_paths)
 
@@ -5862,7 +5967,7 @@ def _run_cupones_detalle_job(job_id, paths):
             notice=" ".join(parts), notice_level=level, redirect_url="/controles/tarjetas",
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 def _save_jh_monthly_report(path):
@@ -6183,7 +6288,7 @@ def _run_carga_datos_eft_job(job_id, pdf_paths):
             notice=" ".join(parts), notice_level=level, redirect_url=redirect_url,
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 @app.route("/carga-datos/eft/cupones/subir", methods=["POST"])
@@ -6206,7 +6311,7 @@ def carga_datos_eft_cupones_subir():
             raise ValueError("No se encontraron filas de cupones en el reporte mensual.")
         records = expand_monthly_records_for_storage(raw_rows)
     except Exception as exc:
-        flash(f"Error: {exc}", "error")
+        flash(f"Error: {_exc_text(exc)}", "error")
         return redirect(url_for("carga_datos_eft"))
 
     inserted, updated, repeated = eft_db.upsert_cupones(records, source_filename=filename)
@@ -6669,7 +6774,7 @@ def _run_caja_gastos_job(job_id, paths, year, month):
             redirect_url=f"/carga-datos/caja?year={year}&month={month}" if year and month else "/carga-datos/caja",
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 @app.route("/carga-datos/caja/gastos/pendiente/<int:pending_id>/agregar", methods=["POST"])
@@ -6892,7 +6997,7 @@ def _run_carga_datos_gettel_job(job_id, paths):
             notice=notice, notice_level=level, redirect_url=redirect_url,
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 # ---------------------------------------------------------------------------
@@ -7003,7 +7108,7 @@ def _run_carga_datos_gettel_pagos_job(job_id, paths):
             notice=" | ".join(parts), notice_level=level, redirect_url=redirect_url,
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 @app.route("/carga-datos/gettel/pagos/<int:pago_id>/editar", methods=["POST"])
@@ -7272,7 +7377,7 @@ def _run_carga_datos_horas_trabajo_job(job_id, paths):
             notice=notice, notice_level=level, redirect_url=redirect_url,
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 @app.route("/carga-datos/horas-trabajo/historial")
@@ -7426,7 +7531,7 @@ def carga_datos_cmv_costo_subir():
     try:
         combined, file_stats, failed_files = _consolidate_department_files(paths)
     except ValueError as exc:
-        flash(f"Error: {exc}", "error")
+        flash(f"Error: {_exc_text(exc)}", "error")
         return redirect(url_for("carga_datos_cmv"))
 
     summary = cmv_db.replace_costs_for_departments(combined.to_dict("records"))
@@ -8329,28 +8434,27 @@ def _kia_toyota_ledger():
     year, month = int(first[:4]), int(first[5:7])
     today = date.today()
     seen = {(p["date"], p["transc"], round(p["amount"], 2)) for p in payments}
-    while (year, month) <= (today.year, today.month):
-        # Cupones del módulo Gettel/Toyota para los días que el Excel no trae.
-        for d in gettel_db.get_month_days(year, month):
-            if d["date"] not in charges and (d.get("gettel_amount") or d.get("toyota_amount")):
-                charges[d["date"]] = {"la": None, "kia": d.get("gettel_amount"), "kia_gal": d.get("gettel_gallons"),
-                                      "toyota": d.get("toyota_amount"), "toyota_gal": d.get("toyota_gallons")}
-        for p in gettel_db.get_month_pagos(year, month):
-            key = (p["fecha"], str(p["transc_n"]), round(p["total_cupon"] or 0, 2))
-            if key not in seen and p["total_cupon"]:
-                seen.add(key)
-                company = {"kia": cuenta_kia_toyota.KIA, "gettel": cuenta_kia_toyota.KIA,
-                           "toyota": cuenta_kia_toyota.TOYOTA}.get((p.get("empresa") or "").strip().lower())
-                payments.append({"date": p["fecha"], "transc": str(p["transc_n"]), "amount": p["total_cupon"],
-                                 "company": company})
-        # Store Info y LOCAL ACCT de los reportes diarios mandan sobre el Excel.
-        local_acct = {}
-        for day, rows in reportes_db.get_month_departments_by_date(year, month).items():
-            local_acct[day] = round(sum(r["amount"] or 0 for r in rows if r["department"] == "LOCAL ACCT"), 2)
-        for r in reportes_db.get_month_store_info(year, month):
-            if r.get("local_accounts") is not None:
-                pos[r["date"]] = {"la": r["local_accounts"], "vs": local_acct.get(r["date"], 0.0)}
-        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    # Del primer mes con algo hasta el mes actual, todo de una vez: antes eran
+    # cuatro consultas por cada mes (V2 de AUDITORIA_2026-11.md).
+    first_month, last_month = (year, month), (today.year, today.month)
+    # Cupones del módulo Gettel/Toyota para los días que el Excel no trae.
+    for d in gettel_db.get_days_in_months(first_month, last_month):
+        if d["date"] not in charges and (d.get("gettel_amount") or d.get("toyota_amount")):
+            charges[d["date"]] = {"la": None, "kia": d.get("gettel_amount"), "kia_gal": d.get("gettel_gallons"),
+                                  "toyota": d.get("toyota_amount"), "toyota_gal": d.get("toyota_gallons")}
+    for p in gettel_db.get_pagos_in_months(first_month, last_month):
+        key = (p["fecha"], str(p["transc_n"]), round(p["total_cupon"] or 0, 2))
+        if key not in seen and p["total_cupon"]:
+            seen.add(key)
+            company = {"kia": cuenta_kia_toyota.KIA, "gettel": cuenta_kia_toyota.KIA,
+                       "toyota": cuenta_kia_toyota.TOYOTA}.get((p.get("empresa") or "").strip().lower())
+            payments.append({"date": p["fecha"], "transc": str(p["transc_n"]), "amount": p["total_cupon"],
+                             "company": company})
+    # Store Info y LOCAL ACCT de los reportes diarios mandan sobre el Excel.
+    local_acct = reportes_db.get_local_acct_in_months(first_month, last_month)
+    for day, local_accounts in reportes_db.get_store_info_local_accounts(first_month, last_month):
+        if local_accounts is not None:
+            pos[day] = {"la": local_accounts, "vs": local_acct.get(day, 0.0)}
     # Lo que cobró el POS (LOCAL ACCT) sin recibo anotado también es un pago.
     extra, over = cuenta_kia_toyota.pos_only_payments(
         payments, pos, cuenta_kia_toyota_db.get_pos_only_assignments())
@@ -8594,7 +8698,7 @@ def _run_depositos_job(job_id, pdf_paths, fallback_period):
             redirect_url=f"/carga-datos/depositos?year={year}&month={month}",
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 @app.route("/carga-datos/depositos/resumen/<summary_no>/eliminar", methods=["POST"])
@@ -9083,7 +9187,7 @@ def _run_carga_datos_proveedores_job(job_id, paths):
             notice="\n".join(parts), notice_level=level, redirect_url=redirect_url,
         )
     except Exception as exc:
-        jobs.update_job(job_id, status="error", error=f"Error: {exc}")
+        jobs.update_job(job_id, status="error", error=f"Error: {_exc_text(exc)}")
 
 
 def _read_supplier_pdf(path):
@@ -9898,7 +10002,7 @@ def proveedores_facturas():
         pdf_paths = _save_uploads_to_workspace(pdf_uploads, workdir=workdir)
         temp_path, summary = append_supplier_invoices(master_path, pdf_paths)
     except Exception as exc:
-        return _proveedores_error(f"Error: {exc}")
+        return _proveedores_error(f"Error: {_exc_text(exc)}")
 
     notices = []
 
@@ -9963,7 +10067,7 @@ def proveedores_pagos():
         bank_path, _bank_filename = _save_upload_to_workspace(bank_upload, workdir=workdir)
         temp_path, summary = append_supplier_payments(master_path, bank_path)
     except Exception as exc:
-        return _proveedores_error(f"Error: {exc}")
+        return _proveedores_error(f"Error: {_exc_text(exc)}")
 
     notices = []
 
@@ -10151,7 +10255,7 @@ def balance_mensual_procesar():
         mayor_paths = _save_uploads_to_workspace(mayor_uploads, workdir=workdir)
         temp_path, summary = replace_mayor_sheets(balance_path, mayor_paths)
     except Exception as exc:
-        return _error_response(f"Error: {exc}")
+        return _error_response(f"Error: {_exc_text(exc)}")
 
     if temp_path is None:
         return _error_response("Ninguno de los Mayores subidos corresponde a una hoja soportada todavía.")

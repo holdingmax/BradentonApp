@@ -19,8 +19,11 @@ primera lectura las copia, en el disco o en la base, y desde ahí manda lo
 que se edite en la página.
 """
 
+import contextlib
+import copy
 import json
 import os
+import threading
 
 import app_paths
 import db
@@ -51,13 +54,49 @@ class Unreadable(ValueError):
     """La configuración existe pero no se puede leer."""
 
 
+_batch = threading.local()
+
+
+@contextlib.contextmanager
+def batch_reads():
+    """
+    Mientras dura (en este hilo), cada configuración se lee una sola vez.
+    Para lo que recorre muchos movimientos consultando las reglas en cada uno
+    (subir un extracto de Chase, recategorizar todo al cambiar una regla):
+    con PostgreSQL cada lectura es una conexión y dos consultas, y eran tres o
+    cuatro lecturas por movimiento (V4 de AUDITORIA_2026-11.md). Guardar una
+    configuración adentro descarta lo leído de esa. Sirve también como
+    decorador: @config_store.batch_reads().
+    """
+    if getattr(_batch, "cache", None) is not None:  # ya adentro de otro
+        yield
+        return
+    _batch.cache = {}
+    try:
+        yield
+    finally:
+        _batch.cache = None
+
+
 def read(name):
+    cache = getattr(_batch, "cache", None)
+    if cache is None:
+        return _read(name)
+    if name not in cache:
+        cache[name] = _read(name)
+    return copy.deepcopy(cache[name])  # cada lectura, su copia: como recién leída
+
+
+def _read(name):
     if db.uses_postgres():
         return _pg_read(name)
     return _file_read(name)
 
 
 def write(name, payload):
+    cache = getattr(_batch, "cache", None)
+    if cache is not None:
+        cache.pop(name, None)
     if db.uses_postgres():
         _pg_write(name, payload)
     else:

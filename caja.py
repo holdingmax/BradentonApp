@@ -21,6 +21,7 @@ from datetime import date, datetime, timedelta
 import caja_db
 import chase_db
 import lottery_db
+import month_chain
 import reportes_db
 from reporte_diario import real_store_info_total_sales
 
@@ -137,7 +138,16 @@ def _collect_chase_amounts_from_db(year, month):
 _MAX_CHAIN_MONTHS = 60  # tope de meses hacia atrás al encadenar (evita recursión sin fin)
 
 
-def _resolve_opening_balance(year, month, _depth=0):
+def _first_data_month():
+    """El primer mes con algo de lo que arma la Caja: Store Info, Chase,
+    Lottery, gastos o un saldo guardado a mano (ver month_chain)."""
+    return month_chain.cached(("caja.first_month",), lambda: month_chain.earliest(
+        caja_db.earliest_data()
+        + [chase_db.earliest_date(), lottery_db.earliest_date(), reportes_db.earliest_store_info_date()]
+    ))
+
+
+def _resolve_opening_balance(year, month, _depth=0, _first_month=None):
     """
     El Saldo Inicial de un mes es, por default, el Saldo Final del mes
     anterior -- pedido explícito del usuario (2026-09-12): "el saldo
@@ -165,12 +175,20 @@ def _resolve_opening_balance(year, month, _depth=0):
     if _depth >= _MAX_CHAIN_MONTHS:
         return 0.0, "default"
 
+    # Sin nada cargado antes de este mes, el mes anterior no tiene datos y
+    # el Saldo Inicial es 0: no hace falta calcularlo (antes se recalculaban
+    # siempre 60 meses hacia atrás; V1 de AUDITORIA_2026-11.md).
+    if _first_month is None:
+        _first_month = [_first_data_month()]
+    if month_chain.nothing_before(_first_month[0], year, month):
+        return 0.0, "default"
+
     prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
     prev_settings = caja_db.get_month_settings(prev_year, prev_month)
     if prev_settings and prev_settings.get("closing_balance_override") is not None:
         return prev_settings["closing_balance_override"], "prev_month_override"
 
-    prev_report = build_month_report_from_db(prev_year, prev_month, _depth=_depth + 1)
+    prev_report = build_month_report_from_db(prev_year, prev_month, _depth=_depth + 1, _first_month=_first_month)
     prev_has_data = prev_report["opening_source"] != "default" or any(prev_report["totals"].values())
     if prev_has_data:
         return prev_report["computed_closing_balance"], "prev_month_computed"
@@ -214,7 +232,15 @@ def _empty_future_month_report(year, month):
     }
 
 
-def build_month_report_from_db(year, month, _depth=0):
+def build_month_report_from_db(year, month, _depth=0, _first_month=None):
+    # El mismo mes pedido varias veces en una página se calcula una sola vez.
+    return month_chain.cached(
+        ("caja.month_report", year, month),
+        lambda: _build_month_report_from_db(year, month, _depth, _first_month),
+    )
+
+
+def _build_month_report_from_db(year, month, _depth, _first_month):
     """
     Un renglón por día del mes, mismas columnas que la hoja CAJA real (ver
     el bloque de comentarios de arriba) -- calculado en el momento contra
@@ -240,7 +266,9 @@ def build_month_report_from_db(year, month, _depth=0):
     # Todo Lottery del mes en una consulta (antes, una conexión por día).
     lottery_by_date = lottery_db.get_days_between(date(year, month, 1), date(year, month, days_in_month))
 
-    opening_balance, opening_source = _resolve_opening_balance(year, month, _depth=_depth)
+    opening_balance, opening_source = _resolve_opening_balance(
+        year, month, _depth=_depth, _first_month=_first_month
+    )
     running_saldo = opening_balance
 
     rows = []

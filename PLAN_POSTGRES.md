@@ -43,7 +43,7 @@
 | Copia a testing | Hecha el 22/10: `migrar_sqlite_a_postgres.py todos` contra `bradenton-dev-db`, 52 tablas y 35.983 filas idénticas; la URL se sacó del `.env` al terminar. Ojo: `app.run()` de Flask lee el `.env`, así que con la URL ahí la app de la PC se conecta a Render |
 | Pendientes | Cuenta propia para Leti en testing; que Cande valide; que Leti arme producción y se repita la copia con los mismos pasos |
 
-**Cómo se prueba cada módulo** (PC, Postgres local en Docker: contenedor `bradenton-pg`, puerto 55432):
+**Cómo se prueba cada módulo** (PC, Postgres local en Docker: contenedor `bradenton-pg`, puerto 15432):
 
 ```
 docker start bradenton-pg

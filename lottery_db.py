@@ -280,6 +280,16 @@ def get_day(report_date):
     return dict(row) if row is not None else None
 
 
+def earliest_date():
+    """La fecha del día más viejo cargado (None si no hay ninguno)."""
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT MIN(date) AS first_date FROM lottery_days").fetchone()
+    finally:
+        conn.close()
+    return row["first_date"] if row else None
+
+
 def get_days_between(start_date, end_date):
     """Igual que get_day, pero todos los días de [start_date, end_date] en una sola consulta: {"YYYY-MM-DD": fila}."""
     conn = _connect()

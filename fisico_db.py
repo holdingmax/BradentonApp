@@ -301,11 +301,21 @@ def get_month_invoices(year, month):
             "SELECT * FROM fuel_invoices WHERE invoice_date LIKE ? ORDER BY invoice_date, id",
             (f"{prefix}%",),
         ).fetchall()
+        # El detalle por grado de todas las facturas del mes en la misma
+        # conexión (antes, una conexión más por cada factura).
+        line_rows = conn.execute(
+            "SELECT l.* FROM fuel_invoice_lines l JOIN fuel_invoices i ON i.id = l.invoice_id "
+            "WHERE i.invoice_date LIKE ? ORDER BY l.id",
+            (f"{prefix}%",),
+        ).fetchall()
     finally:
         conn.close()
     invoices = [dict(row) for row in rows]
+    lines = {}
+    for line in line_rows:
+        lines.setdefault(line["invoice_id"], []).append(dict(line))
     for invoice in invoices:
-        invoice["lines"] = get_invoice_lines(invoice["id"])
+        invoice["lines"] = lines.get(invoice["id"], [])
     return invoices
 
 
@@ -339,6 +349,19 @@ def get_month_settings(year, month):
     finally:
         conn.close()
     return dict(row) if row else None
+
+
+def earliest_data():
+    """Lo más viejo cargado, para cortar el encadenado de meses
+    (fisico._resolve_initial): la fecha de la primera factura y el primer
+    (año, mes) con ajustes guardados."""
+    conn = _connect()
+    try:
+        invoice = conn.execute("SELECT MIN(invoice_date) AS first_date FROM fuel_invoices").fetchone()
+        month = conn.execute("SELECT year, month FROM fisico_months ORDER BY year, month LIMIT 1").fetchone()
+    finally:
+        conn.close()
+    return [invoice["first_date"] if invoice else None, (month["year"], month["month"]) if month else None]
 
 
 def get_settings_years():
