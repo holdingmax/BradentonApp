@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from urllib.parse import quote, urlsplit
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, abort, flash, has_request_context, jsonify, redirect, render_template, request, send_file, session, url_for
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -1220,6 +1220,36 @@ REPORTES_TOOLS = [
     # Proyecciones ya no está acá: se entra desde el botón "Panel de
     # proyecciones" de la barra de arriba (pedido del usuario, 2026-10-27).
 ]
+
+# Un solo color por sección (pedido del usuario, 2026-11-13): todo lo que está
+# dentro de Controles va en el ámbar de Controles, lo de Carga de Datos en su
+# azul y lo de Reportes en su lavanda, sin un color propio por módulo. Los
+# "accent" de las listas de arriba quedan como estaban escritos; acá se pisan
+# todos juntos, así un módulo nuevo toma el color de su sección sin elegirlo.
+SECTION_THEMES = {
+    "carga_datos": {"accent": "#0B6FAE", "accent_soft": "#E0F2FB"},
+    "reportes": {"accent": "#7A6BB0", "accent_soft": "#F1EFF8"},
+    "controles": {"accent": "#B45309", "accent_soft": "#FDF0DC"},
+}
+for _section, _items in (("carga_datos", TOOLS + CARGA_DATOS_TOOLS), ("reportes", REPORTES_TOOLS),
+                         ("controles", CONTROLS + CONTROLES_SECTIONS)):
+    for _item in _items:
+        _item.update(SECTION_THEMES[_section])
+
+_flask_render_template = render_template
+
+
+def render_template(template_name, **context):
+    """El `render_template` de Flask, con el color de la sección de la URL.
+
+    Varias pantallas de Controles se arman con el tema de su módulo de carga
+    (Tarjetas con el de EFT, Kia y Toyota con el de Gettel, Control CMV con el
+    de CMV): acá toda página bajo /controles sale en el color de Controles,
+    pase lo que pase la ruta.
+    """
+    if has_request_context() and (request.path == "/controles" or request.path.startswith("/controles/")):
+        context.update(SECTION_THEMES["controles"])
+    return _flask_render_template(template_name, **context)
 
 THEME_BY_KEY = {
     tool["key"]: {"accent": tool["accent"], "accent_soft": tool["accent_soft"]}
@@ -8040,8 +8070,7 @@ def controles_combustible():
         photo_reading=_fisico_photo_reading(year, month, photos),
         resume_job_id=(_active_job["id"] if _active_job else None),
         **_month_nav(year, month),
-        accent="#92400E",
-        accent_soft="#FDE8CE",
+        **SECTION_THEMES["controles"],
     )
 
 
@@ -10490,7 +10519,7 @@ def balance_mensual():
     # usuario") -- el tema del módulo se pasa directo acá en vez de por
     # THEME_BY_KEY (que ya no tiene esta clave) para que la ruta siga
     # andando si alguien entra por URL directa.
-    return render_template("balance_mensual.html", accent="#78350F", accent_soft="#F5E4CE")
+    return render_template("balance_mensual.html", **SECTION_THEMES["carga_datos"])
 
 
 @app.route("/balance-mensual/procesar", methods=["POST"])

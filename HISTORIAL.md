@@ -2945,3 +2945,12 @@ Pedido de Alfonso (sus superiores prefieren llevarlo como en los Excel): Gettel 
 - **Hallazgo**: REBATE GETTEL de septiembre, la app $636.32 (charge 755.16 + rebate −118.84) y Ratio (11747) $755.16: el asiento de Ratio tiene solo el 3% y no resta el rebate por galón. Con eso el saldo final esperado es $9,162.69 contra $9,281.53 de Ratio ($118.84).
 - **Probado**: `python -m pytest` (90 pasan; `tests/test_gettel_ratio.py`); migración 0028 arriba y abajo en `bradenton-pg`; `comparar_bases.py ratio cuenta_kia_toyota gettel_toyota` (67 comparaciones iguales entre SQLite y Postgres; el comparador ahora acepta un módulo que todavía no tiene su `.db`). Manual: Gettel, Ratio (Mayores), Kia y Toyota y Asientos de Ratio, con capturas.
 - **Pendiente**: el mayor del WP de junio da $13,701.20 y el BALANCE $11,581.64 (el mayor pegado en el WP es anterior a un ajuste); en datos congelados, octubre muestra "20/10 al 31/10 $0.00" (mes sin cargar entero).
+
+### Un color por sección (13/11, mismo chat)
+
+Pedido de Alfonso: que todo lo de Controles tenga la tonalidad de Controles, y lo mismo Carga de Datos y el resto.
+
+- `webapp.SECTION_THEMES` pisa el `accent` de `TOOLS`/`CARGA_DATOS_TOOLS` (azul), `REPORTES_TOOLS` (lavanda) y `CONTROLS`/`CONTROLES_SECTIONS` (ámbar). Como Tarjetas, Kia y Toyota, Control CMV, Depósitos y Productos se arman con el tema de su módulo de carga, `webapp.render_template` envuelve al de Flask y fuerza el ámbar en toda URL bajo `/controles`. La botonera (`--qc-color`) también quedó en ámbar.
+- Quedan con color propio: las 6 categorías del día de Ventas por Departamento (`reporte_dia.html`, son datos) y los estados (rojo, verde, amarillo).
+- Manual: `--c` de cada sección con el color de su sección y las 36 capturas rehechas. Edge headless dejó de devolver la página (salía en 0.2 s sin nada, con decenas de `msedge.exe` colgados): `shot.py` acepta `SHOT_BROWSER=<chrome.exe>` y mide solo la diferencia de ancho (Edge 26 px, Chrome 18). Las capturas viejas se rehicieron cambiando el color en `snap/*.html`, sin volver a pedir las páginas.
+- Probado: las 60 páginas GET sin parámetros con el color esperado; `python -m pytest`.
