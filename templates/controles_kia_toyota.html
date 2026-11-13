@@ -10,32 +10,6 @@
   .historial-nav-title { display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .historial-nav-title a { font-size: 12.5px; text-decoration: none; }
 
-  .kt-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 18px; }
-  .kt-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
-  .kt-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-  .kt-card-head h3 { margin: 0; font-size: 16px; }
-  .kt-card-head .kt-alias { font-weight: 400; color: var(--text-soft); font-size: 13px; }
-  .kt-today { margin-top: 10px; }
-  .kt-today-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-soft); font-weight: 600; }
-  .kt-today-amount { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
-  .kt-today-amount.owes { color: var(--text); }
-  .kt-today-amount.credit { color: var(--success); }
-  .kt-last { margin: 4px 0 0; font-size: 12.5px; color: var(--text-soft); }
-  .kt-last.late { color: var(--error); font-weight: 600; }
-
-  .kt-account { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 13px; }
-  .kt-account-title { font-size: 12px; color: var(--text-soft); font-weight: 600; margin-bottom: 6px; }
-  .kt-line { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-variant-numeric: tabular-nums; }
-  .kt-line .kt-hint { color: var(--text-soft); font-size: 12px; }
-  .kt-line.total { margin-top: 4px; padding-top: 7px; border-top: 1px solid var(--border); font-weight: 700; }
-
-  .kt-both { margin-top: 10px; font-size: 13px; color: var(--text-soft); text-align: right; }
-  .kt-both strong { color: var(--text); font-variant-numeric: tabular-nums; }
-
-  .kt-notice { margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: var(--surface-alt); border: 1px solid var(--border); font-size: 13px; color: var(--text-soft); }
-  .kt-notice ul { margin: 0; padding-left: 18px; }
-  .kt-notice li + li { margin-top: 3px; }
-
   .kt-section { margin-top: 26px; }
   .kt-section h2 { font-size: 16px; margin: 0 0 4px; }
   .kt-section > p { margin: 0 0 10px; font-size: 13px; color: var(--text-soft); }
@@ -43,61 +17,80 @@
   .kt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .kt-table th, .kt-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .kt-table th:first-child, .kt-table td:first-child { text-align: left; }
+  .kt-table th.kt-left, .kt-table td.kt-left { text-align: left; }
+  .kt-table td.kt-wrap { white-space: normal; }
   .kt-table thead th { background: var(--accent-soft); font-weight: 700; }
-  .kt-table thead tr.kt-sub th { font-weight: 600; font-size: 12px; background: var(--surface-alt); }
   .kt-table tbody tr:last-child td { border-bottom: none; }
   .kt-table .kt-sep { border-left: 1px solid var(--border); }
   .kt-table tfoot td { font-weight: 700; background: var(--surface-alt); border-top: 1px solid var(--border); border-bottom: none; }
-  .kt-credit { color: var(--success); }
+  .kt-table tr.kt-total td { font-weight: 700; background: var(--surface-alt); }
+  .kt-table tr.kt-opening td { color: var(--text-soft); }
   .kt-soft { color: var(--text-soft); }
-  .kt-paid { font-weight: 600; }
+  .kt-bad { color: var(--error); font-weight: 600; }
+  .kt-good { color: var(--success); font-weight: 600; }
   .kt-here { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 9px 14px; border-radius: 10px; background: var(--accent-soft); font-size: 13px; }
   .kt-here a { font-weight: 600; text-decoration: none; }
-  .kt-years { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-  .kt-year + .kt-year { border-top: 1px solid var(--border); }
-  .kt-year > summary { list-style: none; cursor: default; display: grid; grid-template-columns: 110px 1fr 1fr; gap: 12px; align-items: center; padding: 10px 14px; background: var(--surface-alt); font-size: 13px; font-variant-numeric: tabular-nums; }
-  .kt-year > summary::-webkit-details-marker { display: none; }
-  .kt-year-name { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
-  .kt-year-name svg { width: 14px; height: 14px; transition: transform .15s; color: var(--text-soft); }
-  .kt-year[open] .kt-year-name svg { transform: rotate(90deg); }
-  .kt-year-co { color: var(--text-soft); }
-  .kt-year-co strong { color: var(--text); font-weight: 600; }
-  .kt-year .kt-table { border-top: 1px solid var(--border); }
+  .kt-check { margin: 8px 0 0; font-size: 12.5px; color: var(--text-soft); }
+  .kt-mark { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 6px; background: var(--surface-alt); border: 1px solid var(--border); font-size: 11.5px; font-weight: 700; color: var(--text-soft); text-align: center; }
+  .kt-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); background: var(--surface-alt); color: var(--text-soft); }
+  .kt-chip.ok { color: var(--success); border-color: var(--success); background: transparent; }
+  .kt-chip.bad { color: var(--error); border-color: var(--error); background: transparent; }
+  .kt-wp-head { margin: 18px 0 0; font-size: 12.5px; color: var(--text-soft); }
+  .kt-wp-head strong { color: var(--text); }
+  .kt-two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr); gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .kt-two { grid-template-columns: 1fr; } }
+  .kt-box { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+  .kt-line { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-variant-numeric: tabular-nums; }
+  .kt-line .kt-hint { color: var(--text-soft); font-size: 12px; display: block; }
+  .kt-line.total { margin-top: 4px; padding-top: 7px; border-top: 1px solid var(--border); font-weight: 700; }
+  .kt-fold { margin-top: 26px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .kt-fold > summary { list-style: none; cursor: default; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--surface-alt); font-size: 14px; font-weight: 700; }
+  .kt-fold > summary::-webkit-details-marker { display: none; }
+  .kt-fold > summary svg { width: 14px; height: 14px; transition: transform .15s; color: var(--text-soft); }
+  .kt-fold[open] > summary svg { transform: rotate(90deg); }
+  .kt-fold > summary span { font-weight: 400; font-size: 12.5px; color: var(--text-soft); }
+  .kt-fold .kt-table-wrap { border: none; border-top: 1px solid var(--border); border-radius: 0; }
+  .kt-fold-body { padding: 12px 14px; border-top: 1px solid var(--border); }
   .kt-table tr.kt-current td { background: var(--accent-soft); }
   .kt-foot { margin-top: 22px; font-size: 12.5px; color: var(--text-soft); }
-  .kt-check { margin: 8px 0 0; font-size: 12.5px; color: var(--text-soft); }
-  .kt-bad { color: var(--error); font-weight: 600; }
-  .kt-pay-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 16px; }
-  .kt-pay { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
-  .kt-pay h3 { margin: 0 0 10px; font-size: 15px; }
-  .kt-pay .kt-alias { font-weight: 400; color: var(--text-soft); font-size: 13px; }
-  .kt-pay-table { border: 1px solid var(--border); border-radius: 8px; }
-  .kt-entries { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 18px; }
-  .kt-entry-title { font-weight: 700; font-style: italic; text-decoration: underline; color: var(--error); margin-bottom: 6px; }
-  .kt-entry-table { border: 1px solid var(--border); }
 </style>
 {% endblock %}
 {% block content %}
 {% from "_month_jump.html" import month_jump %}
-{% macro money(x) -%}{%- if x is none -%}—{%- elif x < 0 -%}-${{ "{:,.2f}".format(-x) }}{%- else -%}${{ "{:,.2f}".format(x) }}{%- endif -%}{%- endmacro %}
-{% macro abs_money(x) -%}${{ "{:,.2f}".format(x|abs) }}{%- endmacro %}
+{% macro money(x) -%}{%- if x is none -%}—{%- else -%}{%- set r = x|round(2) -%}{%- if r < 0 -%}-${{ "{:,.2f}".format(-r) }}{%- else -%}${{ "{:,.2f}".format(r + 0.0) }}{%- endif -%}{%- endif -%}{%- endmacro %}
+{% macro num(x) -%}{{ "{:,.2f}".format(x|round(2) + 0.0) }}{%- endmacro %}
 {% macro dmy(iso) -%}{{ iso[8:10] }}/{{ iso[5:7] }}/{{ iso[:4] }}{%- endmacro %}
-{# Saldo con palabras: positivo = la concesionaria debe; negativo = tiene a favor. #}
-{% macro balance(x) -%}
-  {%- if x is none or x|abs < 0.005 -%}<span class="kt-soft">$0.00</span>
-  {%- elif x < 0 -%}<span class="kt-credit">{{ abs_money(x) }} a favor</span>
-  {%- else -%}{{ abs_money(x) }}{%- endif -%}
-{%- endmacro %}
+{% macro chevron() -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>{%- endmacro %}
+{# Los renglones de una hoja Gettel-Toyota (la del mes o la de días pendientes), con VERIFICAR, rebate, charge y total. #}
+{% macro sheet(rows, totals, letters=false) %}
+<div class="kt-table-wrap">
+  <table class="kt-table">
+    <thead><tr><th>Fecha</th><th class="kt-left">Fecha</th><th>Local Account</th><th class="kt-sep">1 X 1</th><th>Gallon</th><th class="kt-sep">Toyota</th><th>Gallon</th><th class="kt-sep">DIF</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td>{{ dmy(r.date) }}</td><td class="kt-left kt-soft">{{ dmy(next_day(r.date)) }}</td><td>{{ num(r.la) }}</td>
+        <td class="kt-sep">{{ num(r.kia) }}</td><td>{{ num(r.kia_gal) }}</td><td class="kt-sep">{{ num(r.toyota) }}</td><td>{{ num(r.toyota_gal) }}</td>
+        <td class="kt-sep{{ ' kt-bad' if r.dif|abs >= 0.005 }}">{{ num(r.dif) }}</td></tr>
+    {% endfor %}
+      <tr class="kt-total"><td>VERIFICAR</td><td></td><td>{{ num(totals.la) }}{% if letters %} <span class="kt-mark">A</span>{% endif %}</td>
+        <td class="kt-sep">{{ num(totals.kia) }}</td><td>{{ num(totals.kia_gal) }}</td><td class="kt-sep">{{ num(totals.toyota) }}</td><td>{{ num(totals.toyota_gal) }}</td><td class="kt-sep">{{ num(totals.dif) }}</td></tr>
+      <tr><td colspan="2">Rebate x Gallon <span class="kt-soft">({{ "%.2f"|format(rebate) }})</span></td><td>{{ num(totals.rebate) }}{% if letters %} <span class="kt-mark">B</span>{% endif %}</td><td colspan="5" class="kt-sep"></td></tr>
+      <tr><td colspan="2">CHARGE {{ "%.0f"|format(card_charge * 100) }}%</td><td>{{ num(totals.charge) }}{% if letters %} <span class="kt-mark">C</span>{% endif %}</td><td colspan="5" class="kt-sep"></td></tr>
+    </tbody>
+    <tfoot><tr><td colspan="2">TOTAL CUPON A COBRAR{% if letters %} <span class="kt-soft" style="font-weight:400;">A+B+C</span>{% endif %}</td><td>{{ money(totals.total) }}</td><td colspan="5" class="kt-sep"></td></tr></tfoot>
+  </table>
+</div>
+{% endmacro %}
 <div class="page-header">
   <h1>Kia y Toyota</h1>
-  <p class="page-subtitle">Cuánto debe cada concesionaria: lo que cargaron con vales a cuenta menos lo que fueron pagando con la tarjeta. Se carga en <a href="{{ url_for('carga_datos_gettel') }}">Carga de Datos → Gettel / Toyota</a>.</p>
+  <p class="page-subtitle">La cuenta {{ view.code }} {{ view.name }} (Kia y Toyota juntas), como el papel de trabajo: lo pendiente de cobro contra el saldo de Ratio. Se carga en <a href="{{ url_for('carga_datos_gettel') }}">Carga de Datos → Gettel / Toyota</a> y <a href="{{ url_for('carga_datos_ratio') }}">Ratio</a>.</p>
 </div>
 
 <div class="card">
   {% if picked_month %}
   <div class="kt-here">
     <span>Estás viendo <strong>{{ month_name }} {{ year }}</strong>.</span>
-    <a href="{{ url_for('controles_kia_toyota') }}">&larr; Volver a Kia y Toyota</a>
+    <a href="{{ url_for('controles_kia_toyota') }}">&larr; Volver al mes actual</a>
   </div>
   {% endif %}
   <div class="historial-nav">
@@ -110,200 +103,143 @@
     <a href="{{ url_for('controles_kia_toyota', year=next_year, month=next_month) }}" class="btn-secondary historial-nav-btn">Mes siguiente &rarr;</a>
   </div>
 
-  <div class="kt-cards">
-    {% for company in companies %}{% set st = ledger.status[company] %}
-    <div class="kt-card">
-      <div class="kt-card-head">
-        <h3>{{ company }}{% if company == 'Kia' %} <span class="kt-alias">(Gettel)</span>{% endif %}</h3>
-      </div>
-      <div class="kt-today">
-        <div class="kt-today-label">{{ 'Tiene a favor hoy' if st.balance < -0.005 else 'Debe hoy' }}</div>
-        <div class="kt-today-amount {{ 'credit' if st.balance < -0.005 else 'owes' }}">{{ abs_money(st.balance) }}</div>
-        {% if st.last_payment %}
-        <p class="kt-last{{ ' late' if st.late }}">Último pago el {{ dmy(st.last_payment) }}, hace {{ st.days_since }} día{{ '' if st.days_since == 1 else 's' }}.</p>
-        {% endif %}
-      </div>
-      {% if month_summary %}{% set c = month_summary.companies[company] %}
-      <div class="kt-account">
-        <div class="kt-account-title">{{ month_name }} {{ year }}</div>
-        <div class="kt-line"><span>Saldo al empezar el mes</span><span>{{ balance(c.opening) }}</span></div>
-        <div class="kt-line"><span>+ Cargó <span class="kt-hint">({{ money(c.vouchers) }} en vales, {{ "{:,.0f}".format(c.gallons) }} gal)</span></span><span>{{ money(c.charged) }}</span></div>
-        <div class="kt-line"><span>− Pagó</span><span>{{ money(c.paid) }}</span></div>
-        <div class="kt-line total"><span>Saldo al terminar el mes</span><span>{{ balance(c.closing) }}</span></div>
-      </div>
-      {% endif %}
-    </div>
-    {% endfor %}
-  </div>
-  <div class="kt-both">Las dos juntas hoy: <strong>{{ balance(ledger.total_balance) }}</strong></div>
-
-  {% if ledger.issues %}
-  <div class="kt-notice"><ul>{% for issue in ledger.issues %}<li>{{ issue }}</li>{% endfor %}</ul></div>
-  {% endif %}
-
-  {# Cierre del mes como el Excel Cierre (hojas Gettel-Toyota y PAGO) y Ratio (pedido del usuario, 2026-10-29). #}
-  {% set cl = closing %}
-  {% if cl.has_data %}
-  <div class="kt-section" id="kt-cierre">
-    <h2>Cierre de {{ month_name }}, como el Cierre y Ratio</h2>
-    <p>Lo que se les cobra del mes (hoja Gettel-Toyota del Excel Cierre), lo que pagó cada una por separado y los asientos del mes con el nombre que tienen en Ratio.</p>
+  {# --- Resumen, como la hoja "Resumen" del papel de trabajo --- #}
+  <div class="kt-section" id="kt-resumen">
+    <h2>Resumen</h2>
     <div class="kt-table-wrap">
       <table class="kt-table">
-        <thead><tr><th>Cupones del mes</th>{% for company in companies %}<th class="kt-sep">{{ company }}</th>{% endfor %}<th class="kt-sep">Total</th></tr></thead>
+        <thead><tr><th>Cód.</th><th class="kt-left">Descripción</th><th>Saldo s/ Contabilidad {{ dmy(view.month_end) }} <span class="kt-mark">a</span></th><th>Saldo según papel de trabajo <span class="kt-mark">b</span></th><th>Control</th><th></th></tr></thead>
         <tbody>
-          <tr><td>Vales (Local Account)</td>{% for company in companies %}<td class="kt-sep">{{ money(cl.companies[company].vouchers) }}</td>{% endfor %}<td class="kt-sep">{{ money(cl.total.vouchers) }}</td></tr>
-          <tr><td>Galones</td>{% for company in companies %}<td class="kt-sep">{{ "{:,.2f}".format(cl.companies[company].gallons) }}</td>{% endfor %}<td class="kt-sep">{{ "{:,.2f}".format(cl.total.gallons) }}</td></tr>
-          <tr><td>Rebate (−${{ "%.2f"|format(rebate) }} por galón)</td>{% for company in companies %}<td class="kt-sep">{{ money(cl.companies[company].rebate) }}</td>{% endfor %}<td class="kt-sep">{{ money(cl.total.rebate) }}</td></tr>
-          <tr><td>Recargo de la tarjeta ({{ "%.0f"|format(card_charge * 100) }}%)</td>{% for company in companies %}<td class="kt-sep">{{ money(cl.companies[company].charge) }}</td>{% endfor %}<td class="kt-sep">{{ money(cl.total.charge) }}</td></tr>
+          <tr><td>{{ view.code }}</td><td class="kt-left">{{ view.name }}</td>
+            <td>{% if view.ratio_balance %}{{ money(view.ratio_balance.balance) }}{% else %}<span class="kt-soft">sin cargar</span>{% endif %}</td>
+            <td>{{ money(view.pending_total) }}</td>
+            <td class="{{ '' if view.control is none else ('kt-good' if view.within else 'kt-bad') }}">{{ money(view.control) }}</td>
+            <td>{% if view.control is none %}<span class="kt-chip">Falta el saldo de Ratio</span>{% elif view.within %}<span class="kt-chip ok">Dentro del margen</span>{% else %}<span class="kt-chip bad">Revisar</span>{% endif %}</td></tr>
         </tbody>
-        <tfoot><tr><td>Total a cobrar</td>{% for company in companies %}<td class="kt-sep">{{ money(cl.companies[company].total) }}</td>{% endfor %}<td class="kt-sep">{{ money(cl.total.total) }}</td></tr></tfoot>
       </table>
     </div>
-    <p class="kt-check">Local Account del mes en Store Info: {{ money(cl.la) }}{% if cl.la_diff|abs >= 0.005 %} ({{ money(cl.la_diff) }} distinto de los vales){% else %}, igual que los vales{% endif %}.</p>
+    <p class="kt-check"><span class="kt-mark">a</span> El saldo de la cuenta en Ratio{% if view.ratio_balance %} ({{ 'del mayor subido' if view.ratio_balance.origin == 'mayor' else 'cargado a mano' }}){% else %}: se carga en <a href="{{ url_for('carga_datos_ratio') }}">Carga de Datos → Ratio</a>, subiendo el Excel del mayor o escribiendo el saldo{% endif %}.
+      <span class="kt-mark">b</span> El total de los días pendientes de cobro{% if view.cut != view.month_end %} al {{ dmy(view.cut) }}, el último día cargado{% endif %} (cuadro de abajo).
+      Margen: {{ money(view.margin) }}, porque un pago con tarjeta no cae justo en el corte de un día.</p>
+  </div>
 
-    <div class="kt-pay-grid">
-      {% for company in (companies|reverse|list) %}{% set c = cl.companies[company] %}
-      <div class="kt-pay">
-        <h3>Pagos de {{ company }}{% if company == 'Kia' %} <span class="kt-alias">(Gettel)</span>{% endif %}</h3>
-        {% if c.payments %}
-        <table class="kt-table kt-pay-table">
-          <thead><tr><th>Fecha</th><th>Transacciones</th><th>Importe</th></tr></thead>
-          <tbody>
-            {% for date, group in c.payments|groupby('date') %}
-            <tr><td>{{ dmy(date) }}</td>
-              <td class="kt-soft">{% set nums = group|map(attribute='transc')|map('string')|list %}{% if nums == ['POS'] %}Cobrado en el POS, sin recibo{% else %}{{ nums|length }} ({{ nums|first }}{% if nums|length > 1 %} a {{ nums|last }}{% endif %}){% endif %}</td>
-              <td>{{ money(group|sum(attribute='amount')) }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}<p class="kt-soft">Sin pagos en {{ month_name|lower }}.</p>{% endif %}
-        <div class="kt-account">
-          <div class="kt-line"><span>Saldo del mes anterior</span><span>{{ balance(c.opening) }}</span></div>
-          <div class="kt-line"><span>+ A cobrar del mes</span><span>{{ money(c.total) }}</span></div>
-          <div class="kt-line"><span>− Pagó</span><span>{{ money(c.paid) }}</span></div>
-          <div class="kt-line total"><span>Pendiente</span><span>{{ balance(c.closing) }}</span></div>
-        </div>
-      </div>
-      {% endfor %}
+  {% if acct.has_data %}
+  {# --- Análisis del saldo: los movimientos de la cuenta en el mes --- #}
+  <div class="kt-section" id="kt-analisis">
+    <h2>Análisis del saldo</h2>
+    <p>Cuenta: {{ view.code }} - {{ view.name }}. Desde {{ dmy('%04d-%02d-01'|format(year, month)) }} hasta {{ dmy(view.month_end) }}. Los tres movimientos del mes como salen del Cierre, contra el mayor de Ratio.</p>
+    <div class="kt-table-wrap">
+      <table class="kt-table">
+        <thead><tr><th>Descripción</th><th>Débito</th><th>Crédito</th><th class="kt-sep kt-left">En Ratio</th><th>Débito</th><th>Crédito</th><th>Diferencia</th><th></th></tr></thead>
+        <tbody>
+          <tr class="kt-opening"><td>SALDO INICIAL</td><td></td><td></td><td class="kt-sep kt-left">{% if view.ratio_opening %}Saldo al {{ dmy(view.ratio_opening.date) }}{% else %}sin cargar{% endif %}</td><td colspan="2">{{ money(view.ratio_opening.balance) if view.ratio_opening else '' }}</td><td></td><td></td></tr>
+          {% for m in view.movements %}{% set l = m.lines[0] %}
+          <tr><td>{{ m.title }}<span class="kt-soft" style="display:block; font-size:12px;">{{ m.source }}</span></td>
+            <td>{{ money(l.amount) if l.side == 'debit' else '' }}</td><td>{{ money(l.amount) if l.side == 'credit' else '' }}</td>
+            <td class="kt-sep kt-left kt-wrap">{% if l.ratio %}{{ l.ratio.asiento }} · {{ dmy(l.ratio.date) }}<span class="kt-soft" style="display:block; font-size:12px;">{{ l.ratio.description }}</span>{% elif l.status == 'sin_mayor' %}<span class="kt-soft">falta el mayor</span>{% else %}<span class="kt-bad">no está</span>{% endif %}</td>
+            <td>{{ money(l.ratio.debit) if l.ratio and l.ratio.debit else '' }}</td><td>{{ money(l.ratio.credit) if l.ratio and l.ratio.credit else '' }}</td>
+            <td class="{{ 'kt-bad' if l.diff }}">{{ money(l.diff) if l.ratio else '' }}</td>
+            <td>{% if l.status == 'igual' %}<span class="kt-chip ok">Igual</span>{% elif l.status == 'distinto' %}<span class="kt-chip bad">Distinto</span>{% elif l.status == 'falta' %}<span class="kt-chip bad">Falta en Ratio</span>{% else %}<span class="kt-chip">Sin mayor</span>{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><td>SALDO FINAL</td><td colspan="2">{{ money(view.expected_closing) if view.expected_closing is not none else '' }}</td><td class="kt-sep kt-left" style="font-weight:400;">{% if view.ratio_balance %}Saldo al {{ dmy(view.month_end) }}{% endif %}</td><td colspan="2">{{ money(view.ratio_balance.balance) if view.ratio_balance else '' }}</td><td class="{{ 'kt-bad' if view.expected_closing is not none and view.ratio_balance and (view.ratio_balance.balance - view.expected_closing)|abs >= 0.005 }}">{% if view.expected_closing is not none and view.ratio_balance %}{{ money(view.ratio_balance.balance - view.expected_closing) }}{% endif %}</td><td></td></tr></tfoot>
+      </table>
     </div>
-    {% if cl.unassigned %}<p class="kt-check kt-bad">Pagos sin empresa en el mes: {{ money(cl.unassigned_total) }}. Asignalos en Carga de Datos → Gettel / Toyota.</p>{% endif %}
-    <p class="kt-check">Cobrado en el POS (LOCAL ACCT) en el mes: {{ money(cl.vs) }}{% if cl.vs_diff|abs >= 0.005 %} ({{ money(cl.vs_diff) }} distinto de los pagos){% else %}, igual que los pagos de las dos{% endif %}.</p>
-
-    <div class="kt-entries">
-      {% for entry in cl.entries %}
-      <div>
-        <div class="kt-entry-title">{{ entry.title }}</div>
-        <table class="kt-table kt-entry-table">
-          <thead><tr><th>Cuenta / Descripción</th><th>Debe</th><th>Haber</th></tr></thead>
-          <tbody>
-            {% for account, debit, credit in entry.lines %}
-            <tr><td>{{ account }}</td><td>{{ money(debit) if debit is not none else '' }}</td><td>{{ money(credit) if credit is not none else '' }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% endfor %}
-    </div>
-    <p class="kt-check">El Local Account del mes ({{ money(cl.la) }}) va a Gettel KIA dentro de LIQUIDACION CIERRE RECAUDACION (Controles → Cierre).</p>
+    {% if not view.ratio_lines %}<p class="kt-check">{% if view.ratio_covered %}El mayor subido no tiene movimientos de la cuenta en {{ month_name|lower }}.{% else %}Para comparar los movimientos falta subir el mayor de {{ view.code }} de {{ month_name|lower }} en <a href="{{ url_for('carga_datos_ratio') }}">Carga de Datos → Ratio</a>.{% endif %}</p>{% endif %}
   </div>
   {% endif %}
 
-  <div class="kt-section">
-    <h2>Movimientos de {{ month_name }}</h2>
-    {% set moved = days|selectattr('vouchers_total')|list + days|selectattr('paid_total')|list %}
-    {% if month_summary and moved %}
-    <p>Solo los días con cargas o pagos. "Cargó" ya es lo que se les cobra (vales − rebate + 3%).</p>
+  {% if view.ratio_lines %}
+  <details class="kt-fold">
+    <summary>{{ chevron() }}Mayor de Ratio en {{ month_name|lower }} <span>{{ view.ratio_lines|length }} renglón{{ '' if view.ratio_lines|length == 1 else 'es' }}</span></summary>
     <div class="kt-table-wrap">
       <table class="kt-table">
-        <thead>
-          <tr><th rowspan="2">Día</th>{% for company in companies %}<th colspan="3" class="kt-sep" style="text-align:center;">{{ company }}</th>{% endfor %}{% if month_summary.unassigned %}<th rowspan="2" class="kt-sep">Pago sin empresa</th>{% endif %}</tr>
-          <tr class="kt-sub">{% for company in companies %}<th class="kt-sep">Cargó</th><th>Pagó</th><th>Saldo</th>{% endfor %}</tr>
-        </thead>
+        <thead><tr><th>Asiento</th><th class="kt-left">Fecha</th><th class="kt-left">Descripción</th><th>Débito</th><th>Crédito</th><th>Saldo</th><th></th></tr></thead>
         <tbody>
-        {% for d in days if d.vouchers_total or d.paid_total %}{% set paid = d.paid or {} %}
-          <tr>
-            <td>{{ d.date[8:10] }}/{{ d.date[5:7] }}</td>
-            {% for company in companies %}{% set c = d[company] or {} %}
-            <td class="kt-sep">{{ money(c.charged) if c.charged else '' }}</td>
-            <td class="kt-paid">{{ money(paid[company]) if paid[company] else '' }}</td>
-            <td>{{ balance(d.balance[company]) }}</td>
-            {% endfor %}
-            {% if month_summary.unassigned %}<td class="kt-sep">{{ money(paid['?']) if paid['?'] else '' }}</td>{% endif %}
-          </tr>
-        {% endfor %}
+          <tr class="kt-opening"><td></td><td></td><td class="kt-left">SALDO INICIAL</td><td></td><td></td><td>{{ money(view.ratio_opening.balance) if view.ratio_opening else '' }}</td><td></td></tr>
+          {% for l in view.ratio_lines %}
+          <tr><td>{{ l.asiento }}</td><td class="kt-left">{{ dmy(l.date) }}</td><td class="kt-left kt-wrap">{{ l.description }}</td><td>{{ money(l.debit) }}</td><td>{{ money(l.credit) }}</td><td>{{ money(l.balance) }}</td>
+            <td>{% if not l.matched %}<span class="kt-chip bad">No está en el Cierre</span>{% endif %}</td></tr>
+          {% endfor %}
         </tbody>
-        <tfoot>
-          <tr><td>Total del mes</td>
-            {% for company in companies %}{% set c = month_summary.companies[company] %}
-            <td class="kt-sep">{{ money(c.charged) }}</td><td>{{ money(c.paid) }}</td><td>{{ balance(c.closing) }}</td>
-            {% endfor %}
-            {% if month_summary.unassigned %}<td class="kt-sep">{{ money(month_summary.unassigned) }}</td>{% endif %}
-          </tr>
-        </tfoot>
       </table>
     </div>
+  </details>
+  {% endif %}
+
+  {# --- Pendiente de cobro, como el papel de trabajo --- #}
+  <div class="kt-section" id="kt-pendiente">
+    <h2>Pendiente de cobro al {{ dmy(view.cut) }}</h2>
+    {% if acct.pending_rows %}
+    <p>Los días que todavía no pagaron, del {{ dmy(acct.pending_rows[0].date) }} al {{ dmy(acct.pending_rows[-1].date) }}{% if not acct.has_data %} (no hay nada cargado de {{ month_name|lower }}: es lo que quedó del mes anterior){% endif %}.</p>
+    {{ sheet(acct.pending_rows, acct.pending, letters=true) }}
+    <p class="kt-check">{% if acct.pending_fixed %}El primer día pendiente es el de la hoja "Pendiente" del Excel de Cierre (o el cargado a mano).{% else %}Días sugeridos: el tramo que más se acerca a lo que falta cobrar. Se fijan subiendo el Excel de Cierre o a mano, en <a href="{{ url_for('carga_datos_gettel') }}#dias-pendientes">Carga de Datos → Gettel / Toyota</a>.{% endif %}
+      {% if acct.has_data and acct.gap|abs >= 0.005 %}Contra lo que falta cobrar según los pagos ({{ money(-acct.difference) }}) hay {{ money(acct.gap|abs) }} de diferencia: un pago que no cae justo en el corte de un día.{% endif %}</p>
     {% else %}
-    <p>Sin cargas ni pagos de Kia o Toyota en {{ month_name }} {{ year }}.</p>
+    <p>No queda ningún día pendiente{% if acct.has_data and acct.difference > 0.005 %}: cobraron {{ money(acct.difference) }} de más contra lo que había para cobrar{% endif %}.</p>
     {% endif %}
   </div>
 
-  <div class="kt-section">
-    <h2>Historial mes a mes</h2>
-    <p>Cada año se abre o se cierra con la flecha. Tocá un mes para ver sus días.</p>
-    <div class="kt-years">
-    {% for y in history_years %}
-      <details class="kt-year" data-year="{{ y.year }}"{% if y.year == year|string %} open{% endif %}>
-        <summary>
-          <span class="kt-year-name"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>{{ y.year }}</span>
-          {% for company in companies %}{% set c = y.companies[company] %}
-          <span class="kt-year-co">{{ company }} al cerrar el año: <strong>{{ balance(c.closing) }}</strong></span>
-          {% endfor %}
-        </summary>
-        <div style="overflow-x: auto;">
-        <table class="kt-table">
-          <thead>
-            <tr><th rowspan="2">Mes</th>{% for company in companies %}<th colspan="3" class="kt-sep" style="text-align:center;">{{ company }}</th>{% endfor %}</tr>
-            <tr class="kt-sub">{% for company in companies %}<th class="kt-sep">Cargó</th><th>Pagó</th><th>Saldo</th>{% endfor %}</tr>
-          </thead>
-          <tbody>
-          {% for m in y.months %}
-            <tr class="{{ 'kt-current' if m.month == '%04d-%02d'|format(year, month) }}"><td><a href="{{ url_for('controles_kia_toyota', year=m.month[:4]|int, month=m.month[5:7]|int) }}">{{ month_names[m.month[5:7]|int - 1] }}</a></td>
-              {% for company in companies %}{% set c = m.companies[company] %}
-              <td class="kt-sep">{{ money(c.charged) if c.charged else '' }}</td><td>{{ money(c.paid) if c.paid else '' }}</td><td>{{ balance(c.closing) }}</td>
-              {% endfor %}</tr>
-          {% endfor %}
-          </tbody>
-          <tfoot>
-            <tr><td>Total {{ y.year }}</td>
-              {% for company in companies %}{% set c = y.companies[company] %}
-              <td class="kt-sep">{{ money(c.charged) }}</td><td>{{ money(c.paid) }}</td><td>{{ balance(c.closing) }}</td>
-              {% endfor %}</tr>
-          </tfoot>
-        </table>
+  {% if acct.has_data %}
+  {# --- PAGO Cupones: un solo cuadro para las dos --- #}
+  <details class="kt-fold" open id="kt-pagos">
+    <summary>{{ chevron() }}Pagos de {{ month_name|lower }} <span>los recibos que manda Rick, un solo cuadro para las dos</span></summary>
+    <div class="kt-fold-body">
+      <div class="kt-two">
+        <div class="kt-table-wrap">
+          <table class="kt-table">
+            <thead><tr><th>Fecha</th><th class="kt-left">Pago N°</th><th class="kt-left">Transc N°</th><th>Total cupón</th><th class="kt-left"></th></tr></thead>
+            <tbody>
+            {% for g in acct.payments %}{% for p in g['items'] %}
+              <tr><td>{{ dmy(g.date) if loop.first else '' }}</td><td class="kt-left">{{ g.number if loop.first else '' }}</td>
+                <td class="kt-left">{% if p.transc == 'POS' %}<span class="kt-soft">Cobrado en el POS, sin recibo</span>{% else %}{{ p.transc }}{% endif %}</td>
+                <td>{{ money(p.amount) }}</td><td class="kt-left kt-soft">{% if loop.first and g.company %}({{ g.company }}){% endif %}</td></tr>
+            {% endfor %}{% else %}
+              <tr><td colspan="5" class="kt-soft">Sin pagos en {{ month_name|lower }}.</td></tr>
+            {% endfor %}
+            </tbody>
+            <tfoot><tr><td colspan="3">COBRADO</td><td>{{ money(acct.collected) }}</td><td></td></tr></tfoot>
+          </table>
         </div>
-      </details>
-    {% endfor %}
+        <div class="kt-box">
+          <div class="kt-line"><span>A cobrar del mes<span class="kt-hint">{{ dmy('%04d-%02d-01'|format(year, month)) }} - {{ dmy(acct.last) }}</span></span><span>{{ money(acct.totals.total) }}</span></div>
+          <div class="kt-line"><span>Días pendientes del mes anterior<span class="kt-hint">{% if acct.opening_range %}{{ dmy(acct.opening_range[0]) }} - {{ dmy(acct.opening_range[1]) }}{% else %}ninguno{% endif %}</span></span><span>{{ money(acct.opening) }}</span></div>
+          <div class="kt-line total"><span>Total a cobrar</span><span>{{ money(acct.to_collect) }}</span></div>
+          <div class="kt-line"><span>Cobrado</span><span>{{ money(acct.collected) }}</span></div>
+          <div class="kt-line total"><span>{{ 'Cobrado de más' if acct.difference > 0.005 else 'Falta cobrar' }}</span><span>{{ money(acct.difference|abs) }}</span></div>
+        </div>
+      </div>
+      <p class="kt-check">Cobrado en el POS (LOCAL ACCT) en el mes: {{ money(acct.vs) }}{% if acct.vs and acct.vs_diff|abs >= 0.005 %} <span class="kt-bad">({{ money(acct.vs_diff) }} distinto de los pagos)</span>{% elif acct.vs %}, igual que los pagos{% endif %}. Se acredita con las tarjetas de J.H. a las 48 hs.</p>
     </div>
-  </div>
-  <script>
-    // Qué años dejó abiertos o cerrados el usuario (solo en este navegador).
-    (function () {
-      var KEY = 'kt-years-open';
-      var saved = null;
-      try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
-      document.querySelectorAll('.kt-year').forEach(function (el) {
-        var year = el.getAttribute('data-year');
-        if (saved && Object.prototype.hasOwnProperty.call(saved, year)) el.open = !!saved[year];
-        el.addEventListener('toggle', function () {
-          var state = {};
-          try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) {}
-          state[year] = el.open;
-          try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
-        });
-      });
-    })();
-  </script>
+  </details>
 
-  <p class="kt-foot">Cómo se calcula: sus autos cargan con un vale y no pagan en el momento (Local Account). Se les cobra (vales − ${{ "%.2f"|format(rebate) }} por galón) + {{ (card_charge * 100)|round|int }}% del recargo de la tarjeta, y cada una o dos semanas pagan con la Amex. Un pago atrasado más de {{ late_days }} días se marca en rojo.</p>
+  {# --- La hoja del mes --- #}
+  <details class="kt-fold" id="kt-mes">
+    <summary>{{ chevron() }}Control Gettel/Toyota - {{ '%02d/%04d'|format(month, year) }} <span>Local Account contra los vales de cada una, día por día</span></summary>
+    {{ sheet(acct.rows, acct.totals) }}
+  </details>
+  {% else %}
+  <p class="kt-check" style="margin-top:18px;">Sin cargas ni pagos de Kia o Toyota en {{ month_name|lower }} {{ year }}.</p>
+  {% endif %}
+
+  <details class="kt-fold" id="kt-historial">
+    <summary>{{ chevron() }}Historial mes a mes <span>tocá un mes para verlo</span></summary>
+    <div class="kt-table-wrap">
+      <table class="kt-table">
+        <thead><tr><th>Mes</th><th>Pendiente anterior</th><th>A cobrar del mes</th><th>Cobrado</th><th>Pendiente al cierre</th><th class="kt-left">Desde</th><th class="kt-sep">Saldo en Ratio</th><th>Control</th></tr></thead>
+        <tbody>
+        {% for h in view.history %}
+          <tr class="{{ 'kt-current' if h.year == year and h.month == month }}"><td><a href="{{ url_for('controles_kia_toyota', year=h.year, month=h.month) }}">{{ month_names[h.month - 1] }} {{ h.year }}</a></td>
+            <td>{{ money(h.opening) }}</td><td>{{ money(h.total) }}</td><td>{{ money(h.collected) }}</td><td>{{ money(h.pending) }}</td>
+            <td class="kt-left kt-soft">{{ dmy(h.pending_from) if h.pending_from else '' }}</td>
+            <td class="kt-sep">{{ money(h.ratio) if h.ratio is not none else '' }}</td>
+            <td class="{{ '' if h.control is none else ('kt-good' if h.control|abs <= view.margin + 0.005 else 'kt-bad') }}">{{ money(h.control) if h.control is not none else '' }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <p class="kt-foot">Cómo se calcula: los autos de Kia (Gettel) y de Toyota cargan con un vale y no pagan en el momento (Local Account). Se les cobra el Local Account menos ${{ "%.2f"|format(rebate) }} por galón, más el {{ (card_charge * 100)|round|int }}% del recargo de la tarjeta, y cada una o dos semanas pagan con la Amex.{% if view.last_payment %} Último pago: {{ dmy(view.last_payment) }} ({{ money(view.last_payment_amount) }}), hace {{ view.days_since }} día{{ '' if view.days_since == 1 else 's' }}{% if view.days_since > view.late_days %} <span class="kt-bad">(se está atrasando)</span>{% endif %}.{% endif %}</p>
 </div>
 {% endblock %}

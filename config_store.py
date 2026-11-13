@@ -37,15 +37,18 @@ CONTROLES_RAPIDOS = "controles_rapidos.json"
 SALE_TAX = "control_cierre_sale_tax.json"
 # Lo real del Balance de cada mes cerrado, para el control de Proyecciones.
 PROYECCIONES_BALANCE = "proyecciones_balance.json"
+# Gettel como una sola cuenta: desde qué día queda pendiente cada mes y el margen contra Ratio.
+GETTEL_CUENTA = "gettel_cuenta.json"
 
 # Las que tienen semilla en el repo (las reglas) y las que vivían en la
 # carpeta de datos en vez de la del código.
 _SEEDED = {CHASE_RULES, CHASE_MASTER_RULES, PAGO_RULES, DYNAMIC_SUPPLIERS}
-_IN_DATA_DIR = {CONTROLES_RAPIDOS, SALE_TAX, PROYECCIONES_BALANCE}
+_IN_DATA_DIR = {CONTROLES_RAPIDOS, SALE_TAX, PROYECCIONES_BALANCE, GETTEL_CUENTA}
 NAMES = (USERS, CHASE_RULES, CHASE_MASTER_RULES, PAGO_RULES, DYNAMIC_SUPPLIERS, CONTROLES_RAPIDOS, SALE_TAX,
-         PROYECCIONES_BALANCE)
+         PROYECCIONES_BALANCE, GETTEL_CUENTA)
 # Las que en Postgres son un JSON entero en la tabla ajustes (sin tabla propia).
-_AJUSTES_KEY = {CONTROLES_RAPIDOS: "controles_rapidos", PROYECCIONES_BALANCE: "proyecciones_balance"}
+_AJUSTES_KEY = {CONTROLES_RAPIDOS: "controles_rapidos", PROYECCIONES_BALANCE: "proyecciones_balance",
+                GETTEL_CUENTA: "gettel_cuenta"}
 
 _CHASE_KIND = {CHASE_MASTER_RULES: "maestra", CHASE_RULES: "personalizada"}
 

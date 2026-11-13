@@ -52,6 +52,9 @@ import control_cmv
 import control_combustible
 import cuenta_kia_toyota
 import cuenta_kia_toyota_db
+import control_asientos
+import ratio_mayor
+import ratio_mayor_db
 import control_cmv_db
 import control_depositos
 import ice_machine
@@ -927,9 +930,19 @@ CONTROLES_SECTIONS = [
         "icon": _ICON_CAR,
         "label": "Kia y Toyota",
         "url": "/controles/kia-toyota",
-        "description": "Cuánto debe cada concesionaria: lo que cargan a cuenta menos lo que pagan.",
+        "description": "La cuenta Gettel (Kia y Toyota) como el papel de trabajo: lo pendiente de cobro contra Ratio.",
         "accent": "#0D9488",
         "accent_soft": "#D6F1EE",
+    },
+    {
+        "key": "control_asientos",
+        "code": "AS",
+        "icon": _ICON_CHECKLIST,
+        "label": "Asientos de Ratio",
+        "url": "/controles/asientos",
+        "description": "Los asientos de cierre del mes contra lo que quedó cargado en Ratio.",
+        "accent": "#475569",
+        "accent_soft": "#E2E8F0",
     },
     {
         "key": "control_productos",
@@ -1021,6 +1034,18 @@ CARGA_DATOS_TOOLS = [
         "description": "Los cupones de combustible de Gettel y Toyota.",
         "accent": "#0D9488",
         "accent_soft": "#D6F1EE",
+    },
+    {
+        # Los mayores que exporta Ratio (pedido del usuario, 2026-11-13): el
+        # saldo y los asientos de la contabilidad, para Controles.
+        "key": "carga_ratio",
+        "code": "RT",
+        "icon": _ICON_FILE,
+        "label": "Ratio (Mayores)",
+        "url": "/carga-datos/ratio",
+        "description": "Los mayores de la contabilidad, para comparar saldos y asientos.",
+        "accent": "#475569",
+        "accent_soft": "#E2E8F0",
     },
     {
         "key": "carga_depositos",
@@ -1198,7 +1223,7 @@ REPORTES_TOOLS = [
 
 THEME_BY_KEY = {
     tool["key"]: {"accent": tool["accent"], "accent_soft": tool["accent_soft"]}
-    for tool in TOOLS + CONTROLS + CARGA_DATOS_TOOLS
+    for tool in TOOLS + CONTROLS + CARGA_DATOS_TOOLS + CONTROLES_SECTIONS
 }
 
 # Índice para la barra de búsqueda del header (base.html) -- pedido
@@ -6885,11 +6910,27 @@ def carga_datos_gettel():
     except Exception as exc:
         print(f"[carga-datos/gettel] pagos sin empresa: {exc}")
         unassigned_groups = []
+    # Gettel como una sola cuenta (2026-11-13): desde qué día quedó pendiente
+    # cada mes (lo trae el Excel de Cierre o se carga acá) y el margen contra Ratio.
+    pending_months, margin = [], cuenta_kia_toyota.DEFAULT_MARGIN
+    try:
+        _ledger, account, settings = _gettel_account()
+        if settings["margen"] is not None:
+            margin = settings["margen"]
+        for key in sorted(account, reverse=True)[:6]:
+            a = account[key]
+            pending_months.append({"month": key, "from": a["pending_from"], "to": a["pending_rows"][-1]["date"] if a["pending_rows"] else None,
+                                   "fixed": a["pending_fixed"], "total": a["pending"]["total"], "gap": a["gap"]})
+    except Exception as exc:
+        print(f"[carga-datos/gettel] días pendientes: {exc}")
     return render_template(
         "carga_datos_gettel.html",
         resume_job_id=(_active_job["id"] if _active_job else None),
         resume_pagos_job_id=(_active_pagos_job["id"] if _active_pagos_job else None),
         unassigned_groups=unassigned_groups,
+        pending_months=pending_months,
+        margin=margin,
+        month_names=_MONTH_NAMES_ES,
         companies=cuenta_kia_toyota.COMPANIES,
         voided=cuenta_kia_toyota.VOIDED,
         known_cards=cuenta_kia_toyota.KNOWN_CARDS,
@@ -8198,11 +8239,8 @@ def controles_rapidos_panel(kind):
     elif kind == "kia":
         # Kia y Toyota (pedido del usuario, 2026-10-08): lo que debe cada una
         # hoy y la cuenta del mes elegido.
-        ledger = _kia_toyota_ledger()
-        month_key = f"{year:04d}-{month:02d}"
-        data = {"status": ledger["status"], "companies": cuenta_kia_toyota.COMPANIES,
-                "month": next((m for m in ledger["monthly"] if m["month"] == month_key), None),
-                "unassigned": len(ledger["unassigned_groups"])}
+        # Desde el 2026-11-13, una sola cuenta: lo pendiente de cobro y Ratio.
+        data = _gettel_month_view(year, month)
     elif kind == "tarjetas":
         data = controles_rapidos.tarjetas_status(
             reportes_db.get_card_sales_by_date(), eft_db.get_coupon_gross_by_date(), today=day,
@@ -8465,43 +8503,112 @@ def _kia_toyota_ledger():
     return ledger
 
 
+def _gettel_account():
+    """El ledger de Kia y Toyota, la cuenta única de Gettel mes a mes (cuenta_kia_toyota.single_account) y sus ajustes."""
+    ledger = _kia_toyota_ledger()
+    settings = cuenta_kia_toyota_db.get_settings()
+    return ledger, cuenta_kia_toyota.single_account(ledger, settings["pendiente_desde"]), settings
+
+
+def _month_bounds(year, month):
+    """(primer día, último día, último día del mes anterior), en ISO."""
+    first = date(year, month, 1)
+    last = date(year, month, calendar.monthrange(year, month)[1])
+    return first.isoformat(), last.isoformat(), (first - timedelta(days=1)).isoformat()
+
+
+def _gettel_month_view(year, month):
+    """
+    Gettel (Kia y Toyota) como una sola cuenta, para Controles → Kia y Toyota
+    y la botonera (pedido del usuario, 2026-11-13): el mes como el Excel de
+    Cierre, lo pendiente de cobro como el papel de trabajo de la auditoría y
+    la cuenta 1.02.01.00 de Ratio (saldo y movimientos del mayor subido en
+    Carga de Datos → Ratio).
+    """
+    ledger, account, settings = _gettel_account()
+    acct = cuenta_kia_toyota.account_month(account, year, month)
+    first, last, previous = _month_bounds(year, month)
+    code = cuenta_kia_toyota.GETTEL_ACCOUNT_CODE
+    margin = settings["margen"] if settings["margen"] is not None else cuenta_kia_toyota.DEFAULT_MARGIN
+    balances = {b["date"]: b for b in ratio_mayor_db.list_balances() if b["account"] == code}
+    ratio_balance, ratio_opening = balances.get(last), balances.get(previous)
+    ratio_lines = ratio_mayor_db.get_lines(code, first, last)
+    pending_total = round(acct["pending"]["total"], 2)
+    control = round(ratio_balance["balance"] - pending_total, 2) if ratio_balance else None
+    # Los tres movimientos del mes contra el mayor de Ratio.
+    expected = []
+    for entry, must, must_not in zip(acct["entries"], (("LIQUIDACION", "RECAUDACION"), ("COBRO", "GETTEL"), ("GETTEL",)),
+                                     (("COMISIONES", "ANULACION"), (), ("LIQUIDACION",))):
+        side = "debit" if entry["debit"] is not None else "credit"
+        expected.append({"title": entry["title"], "source": entry["note"], "must": must, "must_not": must_not,
+                         "lines": [{"account": code, "name": cuenta_kia_toyota.GETTEL_ACCOUNT_NAME, "side": side,
+                                    "amount": entry[side], "label": None}]})
+    covered = ratio_mayor_db.covered_accounts(first, last)
+    movements = control_asientos.compare(expected, {code: ratio_lines} if ratio_lines else {}, covered)
+    for result in movements:
+        ratio_line = result["lines"][0]["ratio"]
+        if ratio_line is not None:
+            ratio_line["matched"] = result["lines"][0]["status"]
+    expected_closing = None
+    if ratio_opening and acct["entries"]:
+        expected_closing = round(ratio_opening["balance"] + sum((e["debit"] or 0.0) - (e["credit"] or 0.0) for e in acct["entries"]), 2)
+    history = []
+    for key in sorted(account, reverse=True):
+        a = account[key]
+        y, m = int(key[:4]), int(key[5:7])
+        ratio = balances.get(_month_bounds(y, m)[1])
+        history.append({"year": y, "month": m, "opening": a["opening"], "total": a["totals"]["total"],
+                        "collected": a["collected"], "pending": a["pending"]["total"], "pending_from": a["pending_from"],
+                        "ratio": ratio["balance"] if ratio else None,
+                        "control": round(ratio["balance"] - a["pending"]["total"], 2) if ratio else None})
+    paid = [p for p in ledger["payments"] if p["date"] <= date.today().isoformat()]
+    last_payment = max((p["date"] for p in paid), default=None)
+    return {
+        "acct": acct,
+        "code": code,
+        "name": cuenta_kia_toyota.GETTEL_ACCOUNT_NAME,
+        "month_end": last,
+        # Hasta qué día llega lo cargado: en un mes sin cerrar, el pendiente es a ese día.
+        "cut": (acct["last"] if acct["has_data"] and not acct["complete"]
+                else acct["pending_rows"][-1]["date"] if not acct["has_data"] and acct["pending_rows"] else last),
+        "pending_total": pending_total,
+        "ratio_balance": ratio_balance,
+        "ratio_opening": ratio_opening,
+        "ratio_lines": ratio_lines,
+        "ratio_covered": code in covered,
+        "expected_closing": expected_closing,
+        "control": control,
+        "margin": margin,
+        "within": control is not None and abs(control) <= margin + 0.005,
+        "movements": movements,
+        "history": history,
+        "last_payment": last_payment,
+        "last_payment_amount": round(sum(p["amount"] for p in paid if p["date"] == last_payment), 2) if last_payment else None,
+        "days_since": (date.today() - date.fromisoformat(last_payment)).days if last_payment else None,
+        "late_days": cuenta_kia_toyota.LATE_PAYMENT_DAYS,
+    }
+
+
 @app.route("/controles/kia-toyota")
 def controles_kia_toyota():
+    """
+    Kia y Toyota como una sola cuenta (pedido del usuario, 2026-11-13), con
+    la forma del papel de trabajo "WP GETTEL, J.H WILLIAMS": resumen contra
+    Ratio, análisis del saldo, pendiente de cobro, la hoja del mes y los pagos.
+    """
     year, month = _cierre_month()
-    ledger = _kia_toyota_ledger()
-    month_key = f"{year:04d}-{month:02d}"
-    month_summary = next((m for m in ledger["monthly"] if m["month"] == month_key), None)
+    view = _gettel_month_view(year, month)
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
     next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
-    # Historial agrupado por año, cada uno plegable (pedido del usuario,
-    # 2026-10-08), con lo cargado y pagado del año y el saldo al cerrarlo.
-    history_years = []
-    for m in reversed(ledger["monthly"]):
-        if not history_years or history_years[-1]["year"] != m["month"][:4]:
-            history_years.append({"year": m["month"][:4], "months": [], "companies": {
-                c: {"charged": 0.0, "paid": 0.0, "closing": m["companies"][c]["closing"]}
-                for c in cuenta_kia_toyota.COMPANIES}})
-        entry = history_years[-1]
-        entry["months"].append(m)
-        for c in cuenta_kia_toyota.COMPANIES:
-            entry["companies"][c]["charged"] = round(entry["companies"][c]["charged"] + m["companies"][c]["charged"], 2)
-            entry["companies"][c]["paid"] = round(entry["companies"][c]["paid"] + m["companies"][c]["paid"], 2)
     today = date.today()
     return render_template(
         "controles_kia_toyota.html",
-        ledger=ledger,
-        history_years=history_years,
-        # Un mes elegido (desde el historial o las flechas) que no es el
-        # actual muestra arriba dónde estás parado y cómo volver.
+        view=view,
+        next_day=lambda iso: (date.fromisoformat(iso) + timedelta(days=1)).isoformat(),
+        acct=view["acct"],
         picked_month=(year, month) != (today.year, today.month),
-        companies=cuenta_kia_toyota.COMPANIES,
-        voided=cuenta_kia_toyota.VOIDED,
-        month_summary=month_summary,
-        closing=cuenta_kia_toyota.month_closing(ledger, year, month),
-        days=cuenta_kia_toyota.month_days(ledger, year, month),
         rebate=cuenta_kia_toyota.REBATE_PER_GALLON,
         card_charge=cuenta_kia_toyota.CARD_CHARGE,
-        late_days=cuenta_kia_toyota.LATE_PAYMENT_DAYS,
         year=year,
         month=month,
         month_name=_MONTH_NAMES_ES[month - 1],
@@ -8512,6 +8619,152 @@ def controles_kia_toyota():
         next_month=next_month,
         **THEME_BY_KEY["carga_gettel"],
     )
+
+
+@app.route("/controles/asientos")
+def controles_asientos():
+    """
+    Control de asientos (pedido del usuario, 2026-11-13): los asientos de
+    cierre del mes como los calcula la app (Cierre, Gettel, Lottery, loyalty)
+    contra los mayores de Ratio subidos en Carga de Datos → Ratio. Cálculo en
+    control_asientos.py.
+    """
+    year, month = _cierre_month()
+    first, last, _previous = _month_bounds(year, month)
+    entries = control_cierre.build_month_entries(_build_store_info_rows(year, month), year, month)
+    _ledger, account, _settings = _gettel_account()
+    expected = control_asientos.cierre_entries(entries)
+    expected[2:2] = control_asientos.gettel_entries(cuenta_kia_toyota.account_month(account, year, month))
+    expected += control_asientos.lottery_entries(lottery_db.compute_month_closing(year, month), year, month)
+    expected += control_asientos.loyalty_entries(
+        control_tarjetas.loyalty_month(year, month, eft_db.get_detail_groups()),
+        control_cierre.MONTH_NAMES_UPPER[month - 1], year)
+    results = control_asientos.compare(expected, ratio_mayor_db.get_lines_by_account(first, last),
+                                       ratio_mayor_db.covered_accounts(first, last))
+    prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
+    next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
+    return render_template(
+        "controles_asientos.html",
+        results=results,
+        counts=control_asientos.summary(results),
+        needed=control_asientos.needed_accounts(results),
+        year=year,
+        month=month,
+        month_name=_MONTH_NAMES_ES[month - 1],
+        prev_year=prev_year,
+        prev_month=prev_month,
+        next_year=next_year,
+        next_month=next_month,
+        **THEME_BY_KEY["control_asientos"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Carga de Datos → Ratio (pedido del usuario, 2026-11-13): los mayores que
+# exporta Ratio a Excel (ratio_mayor.py) y, si no hay Excel, el saldo de una
+# cuenta cargado a mano. Los usan Controles → Kia y Toyota y Asientos de Ratio.
+# ---------------------------------------------------------------------------
+
+@app.route("/carga-datos/ratio")
+def carga_datos_ratio():
+    periods = ratio_mayor_db.list_periods()
+    balances = ratio_mayor_db.list_balances()
+    accounts = {}
+    for p in periods:
+        entry = accounts.setdefault(p["account"], {"code": p["account"], "name": p["name"], "periods": [], "balance": None})
+        entry["periods"].append(p)
+    for b in balances:
+        entry = accounts.setdefault(b["account"], {"code": b["account"], "name": b["name"] or control_asientos.ACCOUNTS.get(b["account"], ""),
+                                                   "periods": [], "balance": None})
+        if entry["balance"] is None or b["date"] >= entry["balance"]["date"]:
+            entry["balance"] = b
+    today = date.today()
+    return render_template(
+        "carga_datos_ratio.html",
+        accounts=[accounts[code] for code in sorted(accounts)],
+        manual=[b for b in balances if b["origin"] == ratio_mayor_db.ORIGIN_MANUAL],
+        known_accounts=sorted(control_asientos.ACCOUNTS.items()),
+        default_date=(today.replace(day=1) - timedelta(days=1)).isoformat(),
+        **THEME_BY_KEY["carga_ratio"],
+    )
+
+
+@app.route("/carga-datos/ratio/subir", methods=["POST"])
+def carga_datos_ratio_subir():
+    uploads = [u for u in request.files.getlist("files") if u and u.filename]
+    if not uploads:
+        return _error_response("Seleccioná el Excel del mayor de Ratio.")
+    loaded, errors = [], []
+    for upload in uploads:
+        path = None
+        try:
+            path, filename = _save_upload_to_workspace(upload)
+            for account in ratio_mayor.read_mayor_workbook(path):
+                ratio_mayor_db.save_mayor(account, ratio_mayor.month_end_balances(account), filename)
+                loaded.append(account)
+        except Exception as exc:
+            print(f"[carga-datos/ratio] {upload.filename}: {exc}")
+            errors.append("Un archivo no se pudo leer: tiene que ser el Excel del Libro Mayor de Ratio (.xlsx).")
+        finally:
+            if path:
+                shutil.rmtree(os.path.dirname(path), ignore_errors=True)
+    if loaded:
+        names = ", ".join(sorted({f"{a['code']} {a['name']}" for a in loaded}))
+        flash(f"Se cargó el mayor de {len(loaded)} cuenta(s): {names}.", "success")
+    for message in errors:
+        flash(message, "error")
+    return redirect(url_for("carga_datos_ratio"))
+
+
+@app.route("/carga-datos/ratio/saldo", methods=["POST"])
+def carga_datos_ratio_saldo():
+    account = (request.form.get("account") or "").strip()
+    day = (request.form.get("date") or "").strip()
+    if not re.fullmatch(r"\d\.\d{2}\.\d{2}\.\d{2}", account):
+        return _error_response("Elegí la cuenta.")
+    try:
+        date.fromisoformat(day)
+    except ValueError:
+        return _error_response("La fecha del saldo no es válida.")
+    if request.form.get("action") == "borrar":
+        ratio_mayor_db.set_manual_balance(account, day, None)
+        return redirect(url_for("carga_datos_ratio"))
+    balance = ratio_mayor.to_number(request.form.get("balance"))
+    if balance is None or not math.isfinite(balance):
+        return _error_response("Escribí el saldo de la cuenta en Ratio.")
+    ratio_mayor_db.set_manual_balance(account, day, round(balance, 2), control_asientos.ACCOUNTS.get(account))
+    flash("Saldo guardado.", "success")
+    return redirect(request.form.get("next") if (request.form.get("next") or "").startswith("/carga-datos/") else url_for("carga_datos_ratio"))
+
+
+@app.route("/carga-datos/gettel/pendiente", methods=["POST"])
+def carga_datos_gettel_pendiente():
+    """Desde qué día queda pendiente un mes de Gettel (como la hoja "Pendiente" del Cierre), o el margen contra Ratio."""
+    if "margin" in request.form:
+        margin = ratio_mayor.to_number(request.form.get("margin"))
+        if margin is None or not math.isfinite(margin) or margin < 0:
+            return _error_response("El margen tiene que ser un importe.")
+        cuenta_kia_toyota_db.set_margin(round(margin, 2))
+        flash("Margen guardado.", "success")
+        return redirect(url_for("carga_datos_gettel") + "#dias-pendientes")
+    month_key = (request.form.get("month") or "").strip()
+    day = (request.form.get("day") or "").strip()
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month_key):
+        return _error_response("Elegí el mes.")
+    if request.form.get("action") == "automatico" or not day:
+        cuenta_kia_toyota_db.set_pending_from(month_key, "")
+        flash("Ese mes vuelve a los días sugeridos.", "success")
+        return redirect(url_for("carga_datos_gettel") + "#dias-pendientes")
+    try:
+        picked = date.fromisoformat(day)
+    except ValueError:
+        return _error_response("El día no es válido.")
+    _first, last, _previous = _month_bounds(int(month_key[:4]), int(month_key[5:7]))
+    if not (date.fromisoformat(last) - timedelta(days=92) <= picked <= date.fromisoformat(last)):
+        return _error_response("El día tiene que ser de ese mes (o de los tres anteriores).")
+    cuenta_kia_toyota_db.set_pending_from(month_key, day)
+    flash("Días pendientes guardados.", "success")
+    return redirect(url_for("carga_datos_gettel") + "#dias-pendientes")
 
 
 # Lo de Kia y Toyota se carga en Carga de Datos → Gettel / Toyota (pedido del

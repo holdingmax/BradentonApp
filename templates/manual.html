@@ -41,6 +41,7 @@
         <li><a href="#cmv" data-target="cmv"><span class="manual-toc-dot"></span>CMV</a></li>
         <li><a href="#proveedores" data-target="proveedores"><span class="manual-toc-dot"></span>Proveedores</a></li>
         <li><a href="#horas" data-target="horas"><span class="manual-toc-dot"></span>Horas de Trabajo</a></li>
+        <li><a href="#ratio" data-target="ratio"><span class="manual-toc-dot"></span>Ratio (Mayores)</a></li>
       </ul>
     </div>
     <div>
@@ -65,6 +66,7 @@
         <li><a href="#c-cmv" data-target="c-cmv"><span class="manual-toc-dot"></span>Control CMV</a></li>
         <li><a href="#c-combustible" data-target="c-combustible"><span class="manual-toc-dot"></span>Combustible</a></li>
         <li><a href="#c-kia" data-target="c-kia"><span class="manual-toc-dot"></span>Kia y Toyota</a></li>
+        <li><a href="#c-asientos" data-target="c-asientos"><span class="manual-toc-dot"></span>Asientos de Ratio</a></li>
         <li><a href="#c-productos" data-target="c-productos"><span class="manual-toc-dot"></span>Productos de proveedores</a></li>
         <li><a href="#c-ventas" data-target="c-ventas"><span class="manual-toc-dot"></span>Ventas y Costos</a></li>
       </ul>
@@ -180,7 +182,8 @@
           <tr><td>☐</td><td>EFT History, Invoice History y Credit Card Daily Summary (PDF del portal de J.H.)</td><td>EFT y Cupones</td></tr>
           <tr><td>☐</td><td>Facturas varias de J.H. (VPN, Network Fee, Mako)</td><td>EFT y Cupones</td></tr>
           <tr><td>☐</td><td>Comprobantes de gastos de Caja (Paid Out)</td><td>Caja</td></tr>
-          <tr><td>☐</td><td>Excel de Cierre (hoja Gettel-Toyota)</td><td>Gettel / Toyota</td></tr>
+          <tr><td>☐</td><td>Excel de Cierre (hojas Gettel-Toyota, PAGO y Pendiente)</td><td>Gettel / Toyota</td></tr>
+          <tr><td>☐</td><td>Mayores de Ratio del mes, en Excel (Gettel y las cuentas de los asientos de cierre)</td><td>Ratio (Mayores)</td></tr>
           <tr><td>☐</td><td>Elistar: costo por producto y ventas del mes</td><td>CMV</td></tr>
           <tr><td>☐</td><td>Elistar: Depts Report o P &amp; L del mes</td><td>Controles → Control CMV</td></tr>
           <tr><td>☐</td><td>Fotos del ticket "Inventory Report" de los tanques (el del último día)</td><td>Controles → Combustible</td></tr>
@@ -338,9 +341,10 @@
       <ol class="manual-steps">
         <li><span class="n">1</span><p><b>Cupones diarios</b>: el Excel de Rick (hojas Gettel y Toyota) o un PDF por vendedor → Guardar.</p></li>
         <li><span class="n">2</span><p><b>Recibos de pago</b>: nombrá cada PDF con N° de pago y empresa ("Pagos3 Toyota.pdf") → Subir y cargar.</p></li>
-        <li><span class="n">3</span><p><b>Historial de Kia y Toyota</b>: el Excel de Cierre del mes → Subir Excel.</p></li>
+        <li><span class="n">3</span><p><b>Historial de Kia y Toyota</b>: el Excel de Cierre del mes → Subir Excel. De su hoja "Pendiente" sale desde qué día está pendiente de cobro.</p></li>
+        <li><span class="n">4</span><p><b>Días pendientes de cobro</b>: si no subiste el Excel de Cierre, elegí el mes y el primer día sin cobrar → Guardar. "Usar los días sugeridos" deja que lo calcule la página. Abajo, el margen que se acepta contra el saldo de Ratio ($500 si no lo cambiás).</p></li>
       </ol>
-      <div class="manual-tip"><b>Tené en cuenta:</b> en la barra lateral están el Cuadro del mes, el Cuadro de Pagos y la Cuenta corriente de Kia y Toyota.</div>
+      <div class="manual-tip"><b>Tené en cuenta:</b> en la barra lateral están el Cuadro del mes, el Cuadro de Pagos y la Cuenta Gettel (Kia y Toyota).</div>
     </section>
 
     <section class="manual-module" id="cmv" style="--c: #7C3AED">
@@ -389,6 +393,23 @@
       </div>
     </section>
 
+    <section class="manual-module" id="ratio" style="--c: #475569">
+      <div class="manual-module-head"><span class="manual-kicker">Carga de Datos · fin de mes</span><h2>Ratio (Mayores)</h2></div>
+      <p class="manual-lede">Los mayores de la contabilidad, para comparar el saldo de Gettel y los asientos de cierre contra lo cargado acá.</p>
+      {{ shot('ratio', 'Ratio (Mayores)') }}
+      <ol class="manual-steps">
+        <li><span class="n">1</span><p><b>Mayor de Ratio</b>: en Ratio, Libro Mayor de la cuenta, exportado a Excel → Subir mayor. Van varios juntos, uno por cuenta.</p></li>
+        <li><span class="n">2</span><p><b>Saldo a mano</b>: si no tenés el Excel, elegí la cuenta, la fecha de fin de mes y escribí el saldo → Guardar saldo.</p></li>
+        <li><span class="n">3</span><p><b>Lo cargado</b>: qué cuentas y qué fechas hay.</p></li>
+      </ol>
+      <div class="manual-tip"><b>Tené en cuenta:</b>
+        <ul>
+          <li>Subir otra vez la misma cuenta y las mismas fechas reemplaza lo anterior.</li>
+          <li>Con el saldo a mano se compara solo el pendiente de Gettel; para los asientos hace falta el mayor.</li>
+        </ul>
+      </div>
+    </section>
+
     <!-- ================= 2. REPORTES ================= -->
     <div class="manual-section-heading">
       <span class="manual-part">Parte 2</span>
@@ -421,7 +442,7 @@
     <div class="manual-section-heading">
       <span class="manual-part">Parte 3</span>
       <h2>Controles</h2>
-      <p>Comparan lo cargado para saber si el mes cierra. Acá casi no se carga nada: solo Elistar en Control CMV, y las fotos y el inventario en Combustible.</p>
+      <p>Comparan lo cargado para saber si el mes cierra. Acá casi no se carga nada: solo Elistar en Control CMV, y las fotos y el inventario en Combustible. Los mayores de Ratio se suben en Carga de Datos.</p>
     </div>
 
     <section class="manual-intro">
@@ -518,15 +539,32 @@
 
     <section class="manual-module" id="c-kia" style="--c: #0D9488">
       <div class="manual-module-head"><span class="manual-kicker">Controles</span><h2>Kia y Toyota</h2></div>
-      <p class="manual-lede">Cuánto debe cada concesionaria (lo que cargó con vales menos lo que pagó) y el cierre del mes de cada una, como el Cierre y Ratio.</p>
+      <p class="manual-lede">Gettel como una sola cuenta (1.02.01.00 de Ratio, Kia y Toyota juntas), armada como el papel de trabajo de la auditoría: lo pendiente de cobro contra el saldo de la contabilidad.</p>
       {{ shot('kia-toyota', 'Kia y Toyota') }}
       <ol class="manual-steps">
-        <li><span class="n">1</span><p><b>Kia</b>: cuánto debe o tiene a favor hoy, y la cuenta del mes.</p></li>
-        <li><span class="n">2</span><p><b>Toyota</b>: lo mismo.</p></li>
-        <li><span class="n">3</span><p>Lo que se le cobra a cada una en el mes: vales, menos el rebate, más el recargo de la tarjeta (3%). Debajo, lo que pagó cada una.</p></li>
-        <li><span class="n">4</span><p>Los asientos del mes, REBATE GETTEL y COBRO GETTEL-KIA, con las cuentas de Ratio.</p></li>
+        <li><span class="n">1</span><p><b>Resumen</b>: el saldo de Ratio contra el total pendiente. "Dentro del margen" si la diferencia no pasa el margen (un pago con tarjeta no cae justo en el corte de un día).</p></li>
+        <li><span class="n">2</span><p><b>Análisis del saldo</b>: los tres movimientos del mes (LIQUIDACION CIERRE RECAUDACION, COBRO GETTEL-KIA y REBATE GETTEL) contra los del mayor de Ratio.</p></li>
+        <li><span class="n">3</span><p><b>Pendiente de cobro</b>: los días que todavía no pagaron, con el Local Account (A), el rebate (B) y el recargo del 3% (C).</p></li>
+        <li><span class="n">4</span><p><b>Pagos</b>: los recibos del mes en un solo cuadro, y la cuenta: a cobrar del mes, más los días pendientes del mes anterior, menos lo cobrado.</p></li>
       </ol>
-      <div class="manual-tip"><b>Tené en cuenta:</b> más abajo están los movimientos del mes día por día y el historial mes a mes. Se carga en Carga de Datos → Gettel / Toyota.</div>
+      <div class="manual-tip"><b>Tené en cuenta:</b>
+        <ul>
+          <li>Más abajo se abren la hoja del mes día por día (como la del Excel de Cierre) y el historial mes a mes.</li>
+          <li>El saldo de Ratio se carga en Carga de Datos → Ratio (Mayores); los vales, los pagos y los días pendientes, en Carga de Datos → Gettel / Toyota.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="manual-module" id="c-asientos" style="--c: #475569">
+      <div class="manual-module-head"><span class="manual-kicker">Controles</span><h2>Asientos de Ratio</h2></div>
+      <p class="manual-lede">Los asientos de cierre del mes (recaudación, Gettel, Sale Tax, Lottery, comisiones y loyalty) como salen de lo cargado acá, renglón por renglón contra el mayor de Ratio.</p>
+      {{ shot('asientos', 'Asientos de Ratio') }}
+      <ol class="manual-steps">
+        <li><span class="n">1</span><p>Cuántos asientos están iguales que en Ratio, cuántos distintos y cuántos no se pudieron controlar del todo.</p></li>
+        <li><span class="n">2</span><p>De qué cuentas falta subir el mayor del mes.</p></li>
+        <li><span class="n">3</span><p>Cada asiento: a la izquierda lo que da la página y a la derecha el renglón de Ratio (N° de asiento, Debe y Haber) con la diferencia. <b>Igual</b>, <b>Distinto</b>, <b>Falta en Ratio</b> o <b>Sin mayor</b>.</p></li>
+      </ol>
+      <div class="manual-tip"><b>Tené en cuenta:</b> "Solo en Ratio" es un renglón de ese mismo asiento que la página no espera. Los mayores se suben en Carga de Datos → Ratio (Mayores).</div>
     </section>
 
     <section class="manual-module" id="c-productos" style="--c: #DB2777">
@@ -596,7 +634,7 @@
     </section>
   </div>
 </div>
-<p class="manual-footnote">Manual actualizado el 11/11/2026.</p>
+<p class="manual-footnote">Manual actualizado el 13/11/2026.</p>
 <style>
   .manual-page { max-width: none; }
   .manual-shell {

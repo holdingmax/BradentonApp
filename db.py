@@ -43,7 +43,7 @@ SCHEMAS = (
     "config",
     "jh_facturas", "ice_machine", "reporte_mensual", "cheques", "control_cmv", "depositos",
     "horas_trabajo", "jh_mensual", "documents", "fisico", "caja", "gettel_toyota", "lottery",
-    "reportes_diarios", "cuenta_kia_toyota", "eft", "chase", "cmv", "proveedores",
+    "reportes_diarios", "cuenta_kia_toyota", "eft", "chase", "cmv", "proveedores", "ratio",
 )
 
 try:

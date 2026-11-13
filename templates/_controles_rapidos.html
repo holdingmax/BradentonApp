@@ -146,27 +146,29 @@
   {% endif %}
 
 {% elif kind == "kia" %}
-  {% for company in data.companies %}{% set st = data.status[company] %}
-  <div class="qc-status {{ 'bad' if st.late else 'neutral' }}"{% if not loop.first %} style="margin-top: 8px;"{% endif %}>
-    <span>{{ company }}{{ " (Gettel)" if company == "Kia" }}: {{ "tiene a favor hoy" if st.balance < -0.005 else "debe hoy" }}</span>
-    <strong{% if st.balance < -0.005 %} class="qc-good"{% endif %}>${{ "{:,.2f}".format(st.balance|abs) }}</strong>
-    {% if st.last_payment %}<span class="qc-sub{{ ' qc-warn' if st.late }}">Último pago el {{ dmy(st.last_payment) }}, hace {{ st.days_since }} día{{ '' if st.days_since == 1 else 's' }}{{ ": se está atrasando" if st.late }}.</span>{% endif %}
+  {# Una sola cuenta (pedido del usuario, 2026-11-13): lo pendiente de cobro de Kia y Toyota juntas, contra Ratio. #}
+  {% set a = data.acct %}
+  <div class="qc-status {{ 'bad' if data.control is not none and not data.within else 'neutral' }}">
+    <span>Gettel (Kia y Toyota): pendiente de cobro al {{ dmy(data.cut) }}</span>
+    <strong>${{ "{:,.2f}".format(data.pending_total) }}</strong>
+    {% if a.pending_rows %}<span class="qc-sub">Días del {{ dm(a.pending_rows[0].date) }} al {{ dm(a.pending_rows[-1].date) }}.</span>{% endif %}
+    {% if data.last_payment %}<span class="qc-sub{{ ' qc-warn' if data.days_since > data.late_days }}">Último pago el {{ dmy(data.last_payment) }}, hace {{ data.days_since }} día{{ '' if data.days_since == 1 else 's' }}{{ ": se está atrasando" if data.days_since > data.late_days }}.</span>{% endif %}
   </div>
-  {% endfor %}
-  {% if data.month %}
+  {% if a.has_data %}
   <table class="qc-table">
-    <thead><tr><th>En el mes</th><th>Cargó</th><th>Pagó</th><th>Al terminar</th></tr></thead>
+    <thead><tr><th>En el mes</th><th>Importe</th></tr></thead>
     <tbody>
-    {% for company in data.companies %}{% set c = data.month.companies[company] %}
-      <tr><td>{{ company }}</td><td>{{ money(c.charged) }}</td><td>{{ money(c.paid) }}</td>
-        <td>{% if c.closing < -0.005 %}<span class="qc-good">${{ "{:,.2f}".format(-c.closing) }} a favor</span>{% else %}{{ money(c.closing) }}{% endif %}</td></tr>
-    {% endfor %}
+      <tr><td>Pendiente del mes anterior</td><td>{{ money(a.opening|round(2)) }}</td></tr>
+      <tr><td>A cobrar del mes</td><td>{{ money(a.totals.total|round(2)) }}</td></tr>
+      <tr><td>Cobrado</td><td>{{ money(a.collected|round(2)) }}</td></tr>
+      <tr><td>Saldo en Ratio ({{ data.code }})</td><td>{% if data.ratio_balance %}{{ money(data.ratio_balance.balance) }}{% else %}sin cargar{% endif %}</td></tr>
+      {% if data.control is not none %}<tr><td>Ratio − pendiente</td><td>{% if data.within %}<span class="qc-good">{{ money(data.control) }}</span>{% else %}{{ money(data.control) }}{% endif %}</td></tr>{% endif %}
     </tbody>
   </table>
   {% else %}
   {{ empty_month("cargas ni pagos de Kia o Toyota", "controles_kia_toyota") }}
   {% endif %}
-  {% if data.unassigned %}<p class="qc-note qc-warn">{{ data.unassigned }} pago(s) sin empresa: asignalos en Carga de Datos &rarr; Gettel / Toyota.</p>{% endif %}
+  {% if data.control is not none and not data.within %}<p class="qc-note qc-warn">El saldo de Ratio se aparta más de {{ money(data.margin) }} de lo pendiente.</p>{% endif %}
   <a class="qc-link" href="{{ url_for('controles_kia_toyota', year=this_month.split('-')[0]|int, month=this_month.split('-')[1]|int) }}">Ver control completo &rarr;</a>
 
 {% elif kind == "precios" %}

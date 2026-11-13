@@ -13,6 +13,7 @@ import app_paths
 import os
 from datetime import datetime
 
+import config_store
 import db
 
 _BASE_DIR = app_paths.DATA_DIR
@@ -100,7 +101,37 @@ def save_import(data, source):
                              (d["date"], d["la"], d["vs"], source))
     finally:
         conn.close()
+    # Desde qué día quedó pendiente cada mes, según las hojas "Pendiente" del Excel.
+    for month, day in sorted((data.get("pending") or {}).items()):
+        set_pending_from(month, day)
     return new_days, new_payments
+
+
+# ---------------------------------------------------------------------------
+# Gettel como una sola cuenta (2026-11-13): desde qué día queda pendiente
+# cada mes (hoja "Pendiente" del Cierre o cargado a mano) y el margen contra
+# el saldo de Ratio. Es configuración (config_store), no una tabla.
+# ---------------------------------------------------------------------------
+
+def get_settings():
+    """{"pendiente_desde": {mes: día}, "margen": importe o None (el de siempre)}."""
+    saved = config_store.read(config_store.GETTEL_CUENTA) or {}
+    pending = saved.get("pendiente_desde")
+    return {"pendiente_desde": dict(pending) if isinstance(pending, dict) else {}, "margen": saved.get("margen")}
+
+
+def set_pending_from(month, day):
+    """Fija (o, con day=None, libera) el primer día pendiente de un mes "AAAA-MM"."""
+    settings = get_settings()
+    # "" = sin fijar (días sugeridos): pisa también el día que la app trae de los Excel de Cierre viejos.
+    settings["pendiente_desde"][month] = day or ""
+    config_store.write(config_store.GETTEL_CUENTA, settings)
+
+
+def set_margin(amount):
+    settings = get_settings()
+    settings["margen"] = amount
+    config_store.write(config_store.GETTEL_CUENTA, settings)
 
 
 def get_charges():

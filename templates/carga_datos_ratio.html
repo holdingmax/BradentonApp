@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block crumbs %}
+<nav class="crumbs"><span class="current">Ratio (Mayores)</span></nav>
+{% endblock %}
+{% block head_extra %}
+<style>
+  .rt-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .rt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rt-table th, .rt-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); text-align: left; font-variant-numeric: tabular-nums; }
+  .rt-table th.rt-num, .rt-table td.rt-num { text-align: right; white-space: nowrap; }
+  .rt-table thead th { background: var(--accent-soft); font-weight: 700; }
+  .rt-table tbody tr:last-child td { border-bottom: none; }
+  .rt-soft { color: var(--text-soft); }
+  .rt-form { display: grid; grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) auto; gap: 10px; align-items: end; }
+  @media (max-width: 800px) { .rt-form { grid-template-columns: 1fr; } }
+  .rt-form label { display: block; font-size: 12.5px; color: var(--text-soft); margin-bottom: 4px; }
+  .rt-form select, .rt-form input { width: 100%; margin: 0; }
+  .rt-form button { margin: 0; }
+  .rt-form select, .rt-form input[type=date] { padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); color: var(--text); font: inherit; box-sizing: border-box; }
+</style>
+{% endblock %}
+{% block content %}
+{% macro money(x) -%}{%- if x is none -%}—{%- elif x < 0 -%}-${{ "{:,.2f}".format(-x) }}{%- else -%}${{ "{:,.2f}".format(x) }}{%- endif -%}{%- endmacro %}
+{% macro dmy(iso) -%}{{ iso[8:10] }}/{{ iso[5:7] }}/{{ iso[:4] }}{%- endmacro %}
+<div class="page-header">
+  <h1>Ratio (Mayores)</h1>
+  <p class="page-subtitle">Los mayores de la contabilidad, para comparar contra lo cargado acá: el saldo de Gettel en <a href="{{ url_for('controles_kia_toyota') }}">Controles → Kia y Toyota</a> y los asientos de cierre en <a href="{{ url_for('controles_asientos') }}">Controles → Asientos de Ratio</a>.</p>
+</div>
+
+<div class="card">
+  <h2>Mayor de Ratio (Excel)</h2>
+  <p class="muted">En Ratio: Libro Mayor, elegí la cuenta y las fechas, y exportalo a Excel. Se pueden subir varios juntos (uno por cuenta), de un mes o de varios. Subir otra vez la misma cuenta y las mismas fechas reemplaza lo anterior.</p>
+  <form method="post" action="{{ url_for('carga_datos_ratio_subir') }}" enctype="multipart/form-data">
+    <label class="muted">Excel del mayor</label>
+    <input type="file" name="files" id="ratio-mayor-input" accept=".xlsx" multiple class="accumulate-files" required>
+    <div class="form-actions">
+      <button type="submit">Subir mayor</button>
+      <button type="button" class="btn-secondary clear-file-btn" data-target="ratio-mayor-input">Limpiar</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" id="saldo-a-mano">
+  <h2>Saldo a mano</h2>
+  <p class="muted">Si no tenés el Excel, alcanza con el saldo de la cuenta a fin de mes, como figura en Ratio. Con el saldo solo se compara el pendiente; para comparar los asientos hace falta el mayor.</p>
+  <form method="post" action="{{ url_for('carga_datos_ratio_saldo') }}" class="rt-form">
+    <div>
+      <label for="rt-account">Cuenta</label>
+      <select name="account" id="rt-account" required>
+        {% for code, name in known_accounts %}<option value="{{ code }}"{% if code == '1.02.01.00' %} selected{% endif %}>{{ code }} - {{ name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="rt-date">Saldo al</label>
+      <input type="date" name="date" id="rt-date" value="{{ default_date }}" required>
+    </div>
+    <div>
+      <label for="rt-balance">Saldo</label>
+      <input type="text" inputmode="decimal" name="balance" id="rt-balance" placeholder="0.00" required>
+    </div>
+    <button type="submit">Guardar saldo</button>
+  </form>
+  {% if manual %}
+  <div class="rt-table-wrap" style="margin-top: 14px;">
+    <table class="rt-table">
+      <thead><tr><th>Cuenta</th><th>Saldo al</th><th class="rt-num">Saldo</th><th></th></tr></thead>
+      <tbody>
+      {% for b in manual|reverse %}
+        <tr><td>{{ b.account }} <span class="rt-soft">{{ b.name or '' }}</span></td><td>{{ dmy(b.date) }}</td><td class="rt-num">{{ money(b.balance) }}</td>
+          <td class="rt-num"><form method="post" action="{{ url_for('carga_datos_ratio_saldo') }}" style="margin:0; display:inline;">
+            <input type="hidden" name="account" value="{{ b.account }}"><input type="hidden" name="date" value="{{ b.date }}">
+            <button type="submit" name="action" value="borrar" class="btn-secondary" style="margin:0; padding:3px 10px;">Borrar</button></form></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Lo cargado</h2>
+  {% if accounts %}
+  <div class="rt-table-wrap">
+    <table class="rt-table">
+      <thead><tr><th>Cuenta</th><th>Mayor subido</th><th>Último saldo</th><th class="rt-num">Saldo</th></tr></thead>
+      <tbody>
+      {% for a in accounts %}
+        <tr><td>{{ a.code }} <span class="rt-soft">{{ a.name or '' }}</span></td>
+          <td>{% for p in a.periods %}{{ dmy(p.date_from) }} al {{ dmy(p.date_to) }}{% if not loop.last %}<br>{% endif %}{% else %}<span class="rt-soft">solo el saldo</span>{% endfor %}</td>
+          <td>{% if a.balance %}{{ dmy(a.balance.date) }} <span class="rt-soft">{{ 'a mano' if a.balance.origin == 'manual' else 'del mayor' }}</span>{% endif %}</td>
+          <td class="rt-num">{{ money(a.balance.balance) if a.balance else '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Todavía no hay ningún mayor ni saldo cargado.</p>
+  {% endif %}
+</div>
+{% endblock %}

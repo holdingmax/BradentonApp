@@ -101,6 +101,9 @@ PAGES = {
                    + [f"/carga-datos/proveedores/guardado/{key}" for key in ("ht_hackney", "airgas", "fpl", "manatee_county", "gce", "cec",
                                                                              "coca", "bimbo", "red_bull", "kooler_ice")]
                    + [url for path in ("/carga-datos/proveedores/historial", "/carga-datos/reportes/proveedores/pdf") for url in _months(path)],
+    # Los mayores de Ratio: el saldo de Gettel y los asientos de cierre (2026-11-13).
+    "ratio": ["/carga-datos/ratio", "/carga-datos/gettel", "/controles", "/carga-datos"]
+             + [url for path in ("/controles/kia-toyota", "/controles/asientos", "/controles/rapidos/kia") for url in _months(path)],
     # Usuarios, reglas, botonera y Sale Tax (config_store.py; en Postgres, el esquema config).
     "config": ["/admin/users", "/perfil/password", "/carga-datos/chase", "/carga-datos/proveedores/reglas", "/proveedores", "/proveedores/nuevo"]
               + [url for path in ("/controles/rapidos/caja", "/controles/cierre", "/carga-datos/chase/historial") for url in _months(path)],
@@ -411,6 +414,41 @@ def _escenario_cuenta_kia_toyota():
     return results
 
 
+def _escenario_ratio():
+    """Un mayor de Gettel de septiembre (subido dos veces: reemplaza), saldos a mano (uno se borra), y los días
+    pendientes y el margen de la cuenta de Gettel."""
+    import cuenta_kia_toyota_db
+    import ratio_mayor
+    import ratio_mayor_db
+
+    rows = [
+        ("Cuenta: 1.02.01.00 - GETTEL KIA  Emisor:prueba - 01/10/2026 10:00:00",),
+        ("Desde: 2026-09-01 Hasta: 30/09/2026",),
+        ("Asiento/Cpbte.", "Fecha", "Cliente/Proveedor", "Descripcion", "Detalle", "Debito", "Credito", "Saldo"),
+        (None, None, None, "SALDO INICIAL", None, None, None, 12060.33),
+        ("11744", "30/09/2026", None, "LIQUIDACION CIERRE RECAUDACION 09-2026", None, 25292.68, 0, 37353.01),
+        ("11746", "30/09/2026", None, "COBRO GETTEL-KIA SEPTIEMBRE", None, 0, 28494.94, 8858.07),
+        ("11747", "30/09/2026", None, "REBATE GETTEL SEPTIEMBRE", None, 755.16, 0, 9613.23),
+    ]
+    (account,) = ratio_mayor.read_rows(rows)
+    balances = ratio_mayor.month_end_balances(account)
+    results = [ratio_mayor_db.save_mayor(account, balances, "Mayor prueba.xlsx"),
+               ratio_mayor_db.save_mayor(account, balances, "Mayor prueba.xlsx")]
+    ratio_mayor_db.set_manual_balance("1.03.02.00", "2026-09-30", 29296.67, "J.H. WILLIAMS")
+    ratio_mayor_db.set_manual_balance("1.02.01.00", "2026-10-31", 5000.0)
+    ratio_mayor_db.set_manual_balance("1.02.01.00", "2026-07-31", 100.0)
+    ratio_mayor_db.set_manual_balance("1.02.01.00", "2026-07-31", None)
+    cuenta_kia_toyota_db.set_pending_from("2026-08", "2026-08-21")
+    cuenta_kia_toyota_db.set_pending_from("2026-07", None)
+    cuenta_kia_toyota_db.set_margin(250.0)
+    results += [ratio_mayor_db.list_balances(), ratio_mayor_db.list_balances("manual"), ratio_mayor_db.list_periods(),
+                ratio_mayor_db.get_lines("1.02.01.00", "2026-09-01", "2026-09-30"),
+                ratio_mayor_db.get_lines_by_account("2026-09-01", "2026-09-30"),
+                sorted(ratio_mayor_db.covered_accounts("2026-09-01", "2026-09-30")),
+                ratio_mayor_db.get_balance("1.02.01.00", "2026-09-30"), cuenta_kia_toyota_db.get_settings()]
+    return results
+
+
 def _escenario_eft():
     """Un EFT de prueba copiado de uno real, DDC corregido a mano, cupones nuevos y repetidos, detalle de cupones
     repetido y nuevo, y los cálculos que se arman con eso."""
@@ -598,7 +636,8 @@ SCENARIOS = {"jh_facturas": _escenario_jh_facturas, "ice_machine": _escenario_ic
              "lottery": _escenario_lottery,
              "reportes_diarios": _escenario_reportes_diarios, "cuenta_kia_toyota": _escenario_cuenta_kia_toyota,
              "eft": _escenario_eft, "chase": _escenario_chase,
-             "cmv": _escenario_cmv, "proveedores": _escenario_proveedores, "config": _escenario_config}
+             "cmv": _escenario_cmv, "proveedores": _escenario_proveedores, "config": _escenario_config,
+             "ratio": _escenario_ratio}
 
 
 # --- Una corrida (proceso aparte por motor) --------------------------------
@@ -625,7 +664,7 @@ def _body(response):
     return f"<{len(data)} bytes {kind}>"
 
 
-_TIME_KEYS = {"updated_at", "created_at", "uploaded_at", "changed_at", "edited_at", "sheet_added_at", "hidden_at", "registrado_en"}
+_TIME_KEYS = {"updated_at", "created_at", "uploaded_at", "changed_at", "edited_at", "sheet_added_at", "hidden_at", "registrado_en", "loaded_at"}
 
 
 def _drop_times(value):
@@ -757,6 +796,13 @@ def main():
         missing = [m for m in args.modulos if m not in migrated]
         if missing:
             sys.exit(f"Sin tablas en Postgres para: {', '.join(missing)} (¿falta alembic upgrade head?)")
+        # Un módulo nuevo todavía no tiene su .db en la carpeta de datos: arranca vacío en los dos motores.
+        empty = [m for m in migrated if m != "config" and not os.path.isfile(os.path.join(pg_dir, f"{m}.db"))]
+        with psycopg.connect(url, autocommit=True) as pg:
+            for schema in empty:
+                for (table,) in pg.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s", (schema,)).fetchall():
+                    pg.execute(psycopg.sql.SQL("TRUNCATE {} RESTART IDENTITY CASCADE").format(psycopg.sql.Identifier(schema, table)))
+        migrated = [m for m in migrated if m not in empty]
         copy = subprocess.run([sys.executable, os.path.join(APP_DIR, "migrar_sqlite_a_postgres.py"), *sorted(migrated), "--origen", pg_dir, "--vaciar",
                                "--config-origen", pg_dir],
                               cwd=APP_DIR, env={**os.environ, "DATABASE_URL": url, "PYTHONIOENCODING": "utf-8"})

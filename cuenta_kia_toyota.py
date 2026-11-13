@@ -98,7 +98,7 @@ def read_control_workbook(path):
     Lee las hojas de Gettel-Toyota de un Excel de Cierre (o de control de
     Gettel). Devuelve {"days": [{date, la, kia, kia_gal, toyota, toyota_gal,
     main}], "payments": [{date, transc, amount, company}], "pos": [{date, la,
-    vs}]}. "main" es la hoja del mes (no la de días pendientes del mes
+    vs}], "pending": {mes: primer día pendiente}}. "main" es la hoja del mes (no la de días pendientes del mes
     anterior). La empresa de un pago sale de la aclaración "(Kia)"/"(Toyota)"
     del primer renglón de cada pago; antes de TOYOTA_START, todo es Kia.
     """
@@ -106,7 +106,7 @@ def read_control_workbook(path):
 
     workbook = load_workbook(path, read_only=True, data_only=True)
     file_month = _file_month(path)
-    result = {"days": [], "payments": [], "pos": []}
+    result = {"days": [], "payments": [], "pos": [], "pending": {}}
     try:
         for sheet in workbook.worksheets:
             title = sheet.title.upper()
@@ -131,7 +131,14 @@ def read_control_workbook(path):
             kind, i = header
             labels = [_norm(v) for v in rows[i]]
             if kind == "days":
-                result["days"].extend(_read_days(rows[i + 1:], labels, "PEND" not in title, file_month))
+                days = _read_days(rows[i + 1:], labels, "PEND" not in title, file_month)
+                result["days"].extend(days)
+                # Hoja "Pendiente": los días sin cobrar al cierre de ese mes,
+                # del primero al último. De ahí sale desde qué día quedó
+                # pendiente (single_account), sea la hoja del mes o la del anterior.
+                if "PEND" in title and days:
+                    last = max(d["date"] for d in days)
+                    result["pending"][last[:7]] = min(d["date"] for d in days)
             else:
                 # Desde septiembre 2026 la hoja PAGO trae un cuadro por empresa,
                 # Toyota en A-H y Kia en I-P (pedido del usuario, 2026-10-29),
@@ -489,3 +496,175 @@ def month_closing(ledger, year, month):
                 (ACCOUNT_JH, vs, None), (ACCOUNT_GETTEL, None, vs)]},
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Gettel como una sola cuenta (pedido del usuario, 2026-11-13)
+# ---------------------------------------------------------------------------
+# Kia y Toyota se llevan juntas, como en el Excel de Cierre (hojas
+# "Gettel-Toyota", "PAGO Cupones" y "Pendiente") y en el papel de trabajo de
+# la auditoría ("WP GETTEL, J.H WILLIAMS", hoja "Analisis saldo GETTEL."): es
+# la cuenta 1.02.01.00 GETTEL KIA de Ratio.
+# - A cobrar del mes (TOTAL CUPON A COBRAR) = Local Account + rebate
+#   (−$0.02 por galón) + CHARGE 3% de (vales + rebate).
+# - Lo pendiente al cierre son días enteros: desde el primer día sin cobrar
+#   hasta fin de mes, y ese total es lo que arrastra el mes siguiente. El día
+#   lo decide quien arma el Cierre (hoja "Pendiente"); la app lo toma del
+#   Excel, o de lo que se cargue a mano, y si no hay nada sugiere el tramo
+#   que más se acerca a lo que falta cobrar.
+# - Ese pendiente se compara contra el saldo de la cuenta en Ratio, con un
+#   margen: los pagos con tarjeta no caen justo en el corte de un día.
+
+GETTEL_ACCOUNT_CODE = "1.02.01.00"
+GETTEL_ACCOUNT_NAME = "GETTEL KIA"
+DEFAULT_MARGIN = 500.0
+# Desde qué día quedó pendiente cada mes en la hoja "Pendiente" de los Excel
+# de Cierre del Drive (leídos el 13/11/2026). Junio 2026 es el papel de
+# trabajo de la auditoría: 17/06 al 30/06, $11,581.64 = saldo de Ratio.
+PENDING_FROM = {
+    "2024-12": "2024-11-29", "2025-02": "2025-02-01", "2025-03": "2025-03-16", "2025-04": "2025-04-30",
+    "2025-05": "2025-05-28", "2025-06": "2025-06-30", "2025-07": "2025-07-31", "2025-08": "2025-08-19",
+    "2025-09": "2025-09-23", "2025-10": "2025-10-27", "2025-11": "2025-11-25", "2025-12": "2025-12-31",
+    "2026-01": "2026-01-29", "2026-02": "2026-02-25", "2026-03": "2026-03-28", "2026-04": "2026-04-26",
+    "2026-05": "2026-05-24", "2026-06": "2026-06-17", "2026-07": "2026-07-19", "2026-08": "2026-08-19",
+    "2026-09": "2026-09-21", "2026-10": "2026-10-20",
+}
+# Hasta cuántos días para atrás se busca el tramo pendiente.
+_PENDING_LOOKBACK = 92
+
+
+def sheet_row(day):
+    """Un día como un renglón de la hoja Gettel-Toyota: Local Account, Gettel, galones, Toyota, galones y DIF."""
+    kia, toyota = day.get(KIA) or {}, day.get(TOYOTA) or {}
+    vouchers = (kia.get("vouchers") or 0.0) + (toyota.get("vouchers") or 0.0)
+    la = day.get("la") if day.get("la") is not None else vouchers
+    return {"date": day["date"], "la": la,
+            "kia": kia.get("vouchers") or 0.0, "kia_gal": kia.get("gallons") or 0.0,
+            "toyota": toyota.get("vouchers") or 0.0, "toyota_gal": toyota.get("gallons") or 0.0,
+            "dif": round(la - vouchers, 2)}
+
+
+def sheet_totals(rows):
+    """
+    La fila VERIFICAR y lo de abajo, con las fórmulas del Excel (sin redondear
+    en el medio): rebate = −0.02 × galones, charge = 3% de (vales + rebate) y
+    total = Local Account + rebate + charge.
+    """
+    totals = {key: sum(r[key] for r in rows) for key in ("la", "kia", "kia_gal", "toyota", "toyota_gal", "dif")}
+    totals["rebate"] = -REBATE_PER_GALLON * (totals["kia_gal"] + totals["toyota_gal"])
+    totals["charge"] = (totals["kia"] + totals["toyota"] + totals["rebate"]) * CARD_CHARGE
+    totals["total"] = totals["la"] + totals["rebate"] + totals["charge"]
+    return totals
+
+
+def suggest_pending(rows, target):
+    """
+    Los días pendientes cuando nadie los fijó: el tramo final de días cuyo
+    TOTAL CUPON A COBRAR más se acerca a lo que falta cobrar. Vacío si no
+    falta nada, o si lo que falta es menos de la mitad del último día.
+    """
+    best, best_gap = [], abs(target)
+    for start in range(len(rows) - 1, -1, -1):
+        total = sheet_totals(rows[start:])["total"]
+        gap = abs(total - target)
+        if gap < best_gap:
+            best, best_gap = rows[start:], gap
+        elif total > target + best_gap:
+            break
+    return best
+
+
+def _blank_row(day):
+    return {"date": day, "la": 0.0, "kia": 0.0, "kia_gal": 0.0, "toyota": 0.0, "toyota_gal": 0.0, "dif": 0.0}
+
+
+def single_account(ledger, pending_from=None):
+    """
+    La cuenta de Gettel mes a mes, como el Excel de Cierre. `ledger` es el de
+    build_ledger; `pending_from` es {mes: día} con el primer día pendiente de
+    cada mes (lo que dice la hoja "Pendiente" o lo cargado a mano), que pisa
+    a PENDING_FROM. Devuelve {mes: {...}} con la hoja del mes, los pagos, lo
+    cobrado, los días pendientes y los tres movimientos de la cuenta en Ratio.
+    """
+    from control_cierre import MONTH_NAMES_UPPER
+
+    fixed = dict(PENDING_FROM)
+    fixed.update(pending_from or {})
+    by_day = {d["date"]: d for d in ledger["days"]}
+    data_days = sorted(d for d, row in by_day.items()
+                       if row.get("la") is not None or row.get("vouchers_total"))
+    rows = [sheet_row(by_day[d]) for d in data_days]
+    payments = ledger.get("payments", [])
+    months = sorted({d[:7] for d in data_days} | {p["date"][:7] for p in payments})
+    account, opening, opening_range = {}, 0.0, None
+    for key in months:
+        year, month = int(key[:4]), int(key[5:7])
+        month_end = f"{key}-{calendar.monthrange(year, month)[1]:02d}"
+        loaded = {r["date"]: r for r in rows if r["date"][:7] == key}
+        last = max(loaded) if loaded else month_end
+        # Todos los días hasta el último cargado, como la hoja del Excel.
+        month_rows = [loaded.get(f"{key}-{d:02d}") or _blank_row(f"{key}-{d:02d}")
+                      for d in range(1, int(last[8:10]) + 1)]
+        totals = sheet_totals(month_rows)
+        month_payments = [p for p in payments if p["date"][:7] == key]
+        groups = payment_groups(month_payments)
+        for number, group in enumerate(groups, 1):
+            group["number"] = number
+        collected = sum(p["amount"] for p in month_payments)
+        to_collect = opening + totals["total"]
+        missing = to_collect - collected
+        upto = [r for r in rows if r["date"] <= month_end][-_PENDING_LOOKBACK:]
+        suggested = suggest_pending(upto, missing)
+        start = fixed.get(key)
+        if start and not any(r["date"] >= start for r in upto):
+            start = None  # el mes todavía no llegó a ese día: vale la sugerencia
+        pending_rows =[r for r in upto if r["date"] >= start] if start else suggested
+        pending = sheet_totals(pending_rows)
+        vs = sum(row.get("vs") or 0.0 for day, row in by_day.items() if day[:7] == key)
+        rebate_entry = totals["rebate"] + totals["charge"]
+        month_name = MONTH_NAMES_UPPER[month - 1]
+        account[key] = {
+            "month": key, "last": last, "complete": last == month_end, "has_data": bool(loaded or month_payments),
+            "rows": month_rows, "totals": totals,
+            "opening": opening, "opening_range": opening_range,
+            "to_collect": to_collect, "payments": groups, "collected": collected,
+            "difference": collected - to_collect,
+            "pending_rows": pending_rows, "pending": pending,
+            "pending_from": pending_rows[0]["date"] if pending_rows else None,
+            "pending_fixed": bool(start),
+            "suggested_from": suggested[0]["date"] if suggested else None,
+            # Lo que falta cobrar menos los días pendientes: el pago que no cae justo en el corte de un día.
+            "gap": round(missing - pending["total"], 2),
+            "vs": round(vs, 2),
+            "vs_diff": round(vs - collected, 2),
+            "entries": [
+                {"title": f"LIQUIDACION CIERRE RECAUDACION {month:02d}-{year}", "debit": round(totals["la"], 2),
+                 "credit": None, "note": "Local Account del mes (Store Info)"},
+                {"title": f"COBRO GETTEL-KIA {month_name}", "debit": None,
+                 "credit": round(vs if vs else collected, 2), "note": "LOCAL ACCT cobrado en el POS"},
+                {"title": f"REBATE GETTEL {month_name} {year}", "debit": round(rebate_entry, 2), "credit": None,
+                 "note": "Rebate x Gallon + CHARGE 3%"},
+            ],
+        }
+        opening = pending["total"]
+        opening_range = (pending_rows[0]["date"], pending_rows[-1]["date"]) if pending_rows else None
+    return account
+
+
+def account_month(account, year, month):
+    """El mes pedido de single_account, o un mes vacío que arrastra el pendiente del último mes anterior."""
+    key = f"{year:04d}-{month:02d}"
+    if key in account:
+        return account[key]
+    previous = [m for m in sorted(account) if m < key]
+    last = account[previous[-1]] if previous else None
+    opening = last["pending"]["total"] if last else 0.0
+    empty = sheet_totals([])
+    return {"month": key, "last": None, "complete": False, "has_data": False, "rows": [], "totals": empty,
+            "opening": opening,
+            "opening_range": ((last["pending_rows"][0]["date"], last["pending_rows"][-1]["date"])
+                              if last and last["pending_rows"] else None),
+            "to_collect": opening, "payments": [], "collected": 0.0, "difference": -opening,
+            "pending_rows": last["pending_rows"] if last else [], "pending": last["pending"] if last else empty,
+            "pending_from": last["pending_from"] if last else None, "pending_fixed": False, "suggested_from": None,
+            "gap": 0.0, "vs": 0.0, "vs_diff": 0.0, "entries": []}

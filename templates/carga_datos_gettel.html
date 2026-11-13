@@ -42,7 +42,7 @@
 
 <div class="card">
   <h2>Historial de Kia y Toyota (Excel de Cierre)</h2>
-  <p class="muted">Las hojas de Gettel-Toyota del Excel de Cierre (cargas por día y empresa, pagos) y Store Info (Local Account y VS), para la cuenta de cada concesionaria en <a href="{{ url_for('controles_kia_toyota') }}">Controles → Kia y Toyota</a>. Se pueden subir varios meses juntos; subir otra vez el mismo mes solo completa lo que falta y nunca pisa la empresa elegida a mano.</p>
+  <p class="muted">Las hojas de Gettel-Toyota del Excel de Cierre (cargas por día y empresa, pagos) y Store Info (Local Account y VS), para la cuenta de Gettel en <a href="{{ url_for('controles_kia_toyota') }}">Controles → Kia y Toyota</a>. Se pueden subir varios meses juntos; subir otra vez el mismo mes solo completa lo que falta y nunca pisa la empresa elegida a mano.</p>
   <form method="post" action="{{ url_for('carga_datos_gettel_cierre') }}" enctype="multipart/form-data">
     <label class="muted">Excel de Cierre</label>
     <input type="file" name="files" id="gettel-cierre-input" accept=".xlsx" multiple class="accumulate-files" required>
@@ -50,6 +50,36 @@
       <button type="submit">Subir Excel</button>
       <button type="button" class="btn-secondary clear-file-btn" data-target="gettel-cierre-input">Limpiar</button>
     </div>
+  </form>
+</div>
+
+<div class="card" id="dias-pendientes">
+  <h2>Días pendientes de cobro</h2>
+  <p class="muted">Gettel se lleva como una sola cuenta: lo pendiente al cierre de cada mes son los días desde el primero sin cobrar hasta fin de mes, como la hoja "Pendiente" del Excel de Cierre. El día sale solo al subir el Excel de Cierre; si no, se elige acá. Sin nada elegido, la app sugiere el tramo que más se acerca a lo que falta cobrar. Se ve en <a href="{{ url_for('controles_kia_toyota') }}">Controles → Kia y Toyota</a>.</p>
+  <form method="post" action="{{ url_for('carga_datos_gettel_pendiente') }}" style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;">
+    <div><label class="muted" for="gt-pend-month" style="display:block;">Mes</label><input type="month" name="month" id="gt-pend-month" value="{{ pending_months[0].month if pending_months else '' }}" required style="margin:0; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); color: var(--text); font: inherit; box-sizing: border-box;"></div>
+    <div><label class="muted" for="gt-pend-day" style="display:block;">Pendiente desde el día</label><input type="date" name="day" id="gt-pend-day" style="margin:0; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); color: var(--text); font: inherit; box-sizing: border-box;"></div>
+    <button type="submit" style="margin:0;">Guardar</button>
+    <button type="submit" name="action" value="automatico" class="btn-secondary" style="margin:0;" formnovalidate>Usar los días sugeridos</button>
+  </form>
+  {% if pending_months %}
+  <div style="overflow-x:auto; border:1px solid var(--border); border-radius:10px; margin-top:14px;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric: tabular-nums;">
+      <thead><tr style="background: var(--accent-soft);"><th style="padding:7px 12px; text-align:left;">Mes</th><th style="padding:7px 12px; text-align:left;">Días pendientes</th><th style="padding:7px 12px; text-align:right;">Total a cobrar</th><th style="padding:7px 12px; text-align:left;"></th></tr></thead>
+      <tbody>
+      {% for p in pending_months %}
+        <tr style="border-top:1px solid var(--border);"><td style="padding:7px 12px;">{{ month_names[p.month[5:7]|int - 1] }} {{ p.month[:4] }}</td>
+          <td style="padding:7px 12px;">{% if p.from %}{{ p.from[8:10] }}/{{ p.from[5:7] }} al {{ p.to[8:10] }}/{{ p.to[5:7] }}{% else %}<span class="muted">ninguno</span>{% endif %}</td>
+          <td style="padding:7px 12px; text-align:right;">${{ "{:,.2f}".format(p.total|round(2) + 0.0) }}</td>
+          <td style="padding:7px 12px;" class="muted">{{ 'del Excel de Cierre o a mano' if p.fixed else 'sugerido' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('carga_datos_gettel_pendiente') }}" style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-top:14px;">
+    <div><label class="muted" for="gt-margin" style="display:block;">Margen contra el saldo de Ratio</label><input type="text" inputmode="decimal" name="margin" id="gt-margin" value="{{ '%.2f'|format(margin) }}" style="margin:0; width:140px;"></div>
+    <button type="submit" class="btn-secondary" style="margin:0;">Guardar margen</button>
   </form>
 </div>
 
