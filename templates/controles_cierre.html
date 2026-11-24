@@ -27,10 +27,6 @@
   .ci-table td.ci-red { color: var(--error); }
   .ci-table tr.ci-plain td { font-weight: 400; color: var(--text-soft); font-size: 12.5px; }
   .ci-short { color: #B45309; font-weight: 700; margin-left: 4px; }
-  .ci-note { margin: 10px 0 0; font-weight: 700; font-style: italic; }
-  .ci-diff { margin: 4px 0 0; font-weight: 700; }
-  .ci-diff.bad { color: var(--error); }
-  .ci-diff.ok { color: var(--success); }
   .ci-table .popover-trigger { font-weight: inherit; color: inherit; }
   .ci-status.bad-strong { background: #FEF2F2; border-color: #FECACA; }
   .ci-cross { margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--border); max-width: 820px; }
@@ -42,9 +38,6 @@
   .ci-cross-sub { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--text-soft); }
   .ci-cross-table thead th { background: var(--accent-soft); font-weight: 700; }
   .ci-cross-table tr.ci-cross-section td { background: var(--surface-alt); font-weight: 700; text-align: left; }
-  .ci-jh-tag { font-size: 11.5px; font-style: normal; font-weight: 600; margin-left: 8px; text-decoration: none; color: var(--text-soft); }
-  .ci-jh-tag.ok, .ci-jh-tag.partial, .ci-jh-tag.pending { color: var(--success); }
-  .ci-jh-tag.bad { color: var(--error); }
   .ci-ok { color: var(--success); }
   .ci-bad { color: var(--error); font-weight: 700; }
   .ci-sale-tax { margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--border); max-width: 820px; }
@@ -193,8 +186,6 @@
           </tr>
         </tbody>
       </table>
-      <p class="ci-note">{{ lottery_note }}</p>
-      <p class="ci-diff {{ 'ok' if balanced else 'bad' }}">Diferencia Debe − Haber: {{ money(entries.difference) }}</p>
     </div>
 
     <div>
@@ -223,13 +214,12 @@
   <div class="ci-sale-tax" id="ci-sale-tax">
     <h2>Devengamiento de Sale Tax</h2>
     {% set st_due = month_end_warnings_due(year, month) %}
-    <div class="ci-status {{ 'ok' if sale_tax_record else ('bad' if st_due else 'none') }}">
-      {% if sale_tax_record or st_due %}
-      <div class="ci-status-title">
+    <div class="ci-status {{ 'ok' if sale_tax_record else ('bad' if st_due else 'none') }}" id="ci-st-status"
+         data-due="{{ '1' if st_due else '' }}" data-missing="Falta registrar el devengamiento de Sale Tax de {{ month_name }} {{ year }}.">
+      <div class="ci-status-title" id="ci-st-status-title"{% if not (sale_tax_record or st_due) %} hidden{% endif %}>
         {% if sale_tax_record %}Registrado{% if sale_tax_record.asiento %} (asiento Nº {{ sale_tax_record.asiento }}){% endif %}.
-        {% else %}Falta registrar el devengamiento de Sale Tax de {{ month_name }} {{ year }}.{% endif %}
+        {% elif st_due %}Falta registrar el devengamiento de Sale Tax de {{ month_name }} {{ year }}.{% endif %}
       </div>
-      {% endif %}
       <p>El Tax Collect del mes (Store Info) se devenga al último día: {{ account_tax_bgs }} a {{ account_sale_tax }}.{% if not entries.complete_month %} El mes todavía no está completo: el importe puede cambiar.{% endif %}{% if st.empty_days %} Tax Collect vacío (cuenta como 0): {{ fmt_days(st.empty_days) }}.{% endif %}</p>
     </div>
     <div class="ci-entry-title ci-st-title">{{ entries.titles.sale_tax }}</div>
@@ -240,7 +230,7 @@
         <tr><td>{{ fmt_ddmm(st.date) }}/{{ st.date[:4] }}</td><td>{{ account_sale_tax }}</td><td class="num">{{ money(0) }}</td><td class="num">{{ money(st.amount) }}</td></tr>
       </tbody>
     </table>
-    <form method="post" action="{{ url_for('controles_cierre_sale_tax', year=year, month=month) }}" class="ci-st-form action-row">
+    <form method="post" action="{{ url_for('controles_cierre_sale_tax', year=year, month=month) }}" class="ci-st-form action-row" id="ci-st-form">
       {% if sale_tax_record %}
       <input type="hidden" name="registered" value="0">
       <span class="muted">Marcado el {{ sale_tax_record.marked_at[8:10] }}/{{ sale_tax_record.marked_at[5:7] }}.</span>
@@ -251,58 +241,67 @@
       <button type="submit" class="btn-accent">Marcar como registrado</button>
       {% endif %}
     </form>
+    <script>
+      // Marcar/Desmarcar sin rearmar la página (pedido del usuario, 2026-11-24:
+      // desmarcar tardaba). El servidor guarda y devuelve solo el registro.
+      (function () {
+        var form = document.getElementById('ci-st-form');
+        var status = document.getElementById('ci-st-status');
+        var title = document.getElementById('ci-st-status-title');
+        if (!form || !window.fetch) return;
+        function render(rec) {
+          var due = status.getAttribute('data-due') === '1';
+          status.className = 'ci-status ' + (rec ? 'ok' : (due ? 'bad' : 'none'));
+          title.hidden = !(rec || due);
+          title.textContent = rec ? 'Registrado' + (rec.asiento ? ' (asiento Nº ' + rec.asiento + ')' : '') + '.'
+            : (due ? status.getAttribute('data-missing') : '');
+          form.innerHTML = '';
+          var hidden = document.createElement('input');
+          hidden.type = 'hidden'; hidden.name = 'registered'; hidden.value = rec ? '0' : '1';
+          form.appendChild(hidden);
+          var button = document.createElement('button');
+          button.type = 'submit';
+          if (rec) {
+            var note = document.createElement('span');
+            note.className = 'muted';
+            note.textContent = 'Marcado el ' + rec.marked_at.slice(8, 10) + '/' + rec.marked_at.slice(5, 7) + '.';
+            form.appendChild(note);
+            button.className = 'btn-secondary'; button.textContent = 'Desmarcar';
+          } else {
+            var input = document.createElement('input');
+            input.type = 'text'; input.name = 'asiento';
+            input.placeholder = 'Nº de asiento (opcional)'; input.setAttribute('aria-label', 'Nº de asiento');
+            form.appendChild(input);
+            button.className = 'btn-accent'; button.textContent = 'Marcar como registrado';
+          }
+          form.appendChild(button);
+        }
+        var busy = false;
+        form.addEventListener('submit', function (event) {
+          event.preventDefault();
+          if (busy) return;
+          busy = true;
+          var button = form.querySelector('button');
+          if (button) button.disabled = true;
+          fetch(form.getAttribute('action'), {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' },
+            body: new URLSearchParams(new FormData(form))
+          }).then(function (resp) {
+            if (!resp.ok) throw new Error();
+            return resp.json();
+          }).then(function (data) {
+            busy = false;
+            render(data.record);
+          }).catch(function () {
+            busy = false;
+            if (button) button.disabled = false;
+            if (typeof showNotice === 'function') showNotice('No se pudo guardar: error de conexión. Volvé a intentarlo.', 'error');
+          });
+        });
+      })();
+    </script>
   </div>
-
-  {% if jh_cards %}
-  {% set d, c = jh_cards.detail, jh_cards.coupons %}
-  <div class="ci-cross" id="ci-jh">
-    <h2>Tarjetas contra J.H. Williams</h2>
-    <div class="ci-status {{ {'ok': 'ok', 'partial': 'ok', 'bad': 'bad-strong', 'pending': 'bad', 'unchecked': 'bad'}.get(jh_cards.status, 'none') }}">
-      <div class="ci-status-title">
-        {% if jh_cards.status == 'ok' %}Bien: lo vendido con tarjeta coincide con lo que informa J.H.
-        {% elif jh_cards.status == 'partial' %}Coincide con lo que hay de J.H., pero falta {{ 'el Credit Card Daily Summary del mes' if not c else 'el detalle de cupones' }}.
-        {% elif jh_cards.status == 'pending' %}Sin diferencias reales con J.H.: {{ money(-(d.diff_pending + d.diff_edge)) }} todavía sin depositar ({{ fmt_days(d.pending + d.edge) }}); se controla al subir el detalle de J.H. del mes siguiente.
-        {% elif jh_cards.status == 'unchecked' %}Coincide en lo que ya se puede controlar; quedan {{ money(d.unchecked) }} de días que el detalle de J.H. todavía no cubre.
-        {% elif jh_cards.status == 'bad' %}{% if d and d.bad %}Diferencia real con J.H.: {{ money(d.diff_bad) }} ({{ fmt_days(d.bad) }}){% if d.pending or d.edge %}; {{ money(-(d.diff_pending + d.diff_edge)) }} todavía sin depositar ({{ fmt_days(d.pending + d.edge) }}){% endif %}.{% else %}El Credit Card Daily Summary de J.H. no coincide con los cupones cargados.{% endif %}
-        {% else %}Todavía no hay datos de J.H. de {{ month_name }} {{ year }}.{% endif %}
-      </div>
-      <p>El renglón {{ account_jh }} sale de las tarjetas de Store Info (TC {{ money(jh_cards.tc) }}). Acá se controla contra la página de J.H.: el detalle de cupones (los batches del POS, por día de venta) y el Credit Card Daily Summary del mes. Día por día en <a href="{{ url_for('controles_tarjetas', year=year, month=month) }}">Controles → Tarjetas y Cupones</a>.</p>
-    </div>
-    <div class="ci-cross-wrap">
-      <table class="ci-cross-table">
-        <thead><tr><th>Concepto</th><th>Store Info</th><th>J.H.</th><th>Diferencia</th></tr></thead>
-        <tbody>
-          <tr class="ci-cross-section"><td colspan="4">Detalle de cupones de J.H.: batches del POS por día de venta</td></tr>
-          {% if d %}
-          <tr><td>Vendido con tarjeta {% if d.from %}del {{ fmt_ddmm(d.from) }} al {{ fmt_ddmm(d.until) }}{% endif %}</td>
-            <td>{{ money(d.sold) }}</td><td>{{ money(d.jh) }}</td>
-            {# Rojo solo si todo el total es diferencia real (pedido del usuario, 2026-10-09): mezclado con lo sin depositar, neutro. #}
-            <td class="{{ 'ci-ok' if d.diff|abs < 0.005 else ('ci-bad' if d.bad and (d.diff - d.diff_bad)|abs < 0.005 else '') }}">{{ money(d.diff) }}</td></tr>
-          {% if d.unchecked|abs >= 0.005 %}
-          <tr><td>Sin controlar todavía (días que el detalle de J.H. no cubre)</td><td>{{ money(d.unchecked) }}</td><td>—</td><td>—</td></tr>
-          {% endif %}
-          {% if d.bad %}<tr><td class="ci-bad">Sin explicar: {{ fmt_days(d.bad) }}{% if d.bad|length > 1 %}<span class="ci-cross-sub">Entre esos días se compensan los batches corridos de fecha, salvo {{ money(d.diff_bad|abs) }}.</span>{% endif %}</td><td></td><td></td><td class="ci-bad">{{ money(d.diff_bad) }}</td></tr>{% endif %}
-          {% if d.pending %}<tr><td>De días todavía sin depositar enteros (72 hs): {{ fmt_days(d.pending) }}{% if d.kia_pending %}<span class="ci-cross-sub">Incluye pagos de Kia/Toyota con tarjeta: {% for day, amount in d.kia_pending %}{{ money(amount) }} ({{ fmt_ddmm(day) }}){{ ', ' if not loop.last else '.' }}{% endfor %}</span>{% endif %}</td><td></td><td></td><td>{{ money(d.diff_pending) }}</td></tr>
-          {% if d.kia_pending %}<tr><td>Sin depositar sin los pagos de Kia/Toyota<span class="ci-cross-sub">Lo que falta de las ventas con tarjeta del negocio.</span></td><td></td><td></td><td><strong>{{ money(d.diff_pending_without_kia) }}</strong></td></tr>{% endif %}{% endif %}
-          {% if d.edge %}<tr><td>De días que no se pueden comparar (falta el día de al lado): {{ fmt_days(d.edge) }}</td><td></td><td></td><td>{{ money(d.diff_edge) }}</td></tr>{% endif %}
-          {% if (d.diff - d.diff_bad - d.diff_pending - d.diff_edge)|abs >= 0.005 %}<tr><td class="muted">De batches que cruzan la medianoche (se compensan con el día siguiente)</td><td></td><td></td><td>{{ money(d.diff - d.diff_bad - d.diff_pending - d.diff_edge) }}</td></tr>{% endif %}
-          {% else %}
-          <tr><td colspan="4" style="text-align:left" class="muted">Sin detalle de cupones de J.H. que toque el mes (se sube en Carga de Datos → EFT y Cupones).</td></tr>
-          {% endif %}
-          <tr class="ci-cross-section"><td colspan="4">Credit Card Daily Summary de J.H. del mes</td></tr>
-          {% if c %}
-          <tr><td>{{ c.ddc_count }} DDC: Gross − Fee (comisiones) = Neto</td><td colspan="2">{{ money(c.gross) }} − {{ money(c.gross - c.net) }} = {{ money(c.net) }}</td>
-            <td class="{{ 'ci-ok' if c.ok else 'ci-bad' }}">{{ 'Coincide con Cupones' if c.ok else 'No coincide' }}</td></tr>
-          {% if c.bad %}<tr><td colspan="4" class="ci-bad" style="text-align:left">Días que no coinciden con los cupones cargados o con lo aplicado en los EFT: {{ fmt_days(c.bad) }}</td></tr>{% endif %}
-          {% if c.open.days %}<tr><td>Sin aplicar todavía en un EFT ({{ c.open.days }} día(s), pasa al mes siguiente por las 72 hs)</td><td colspan="2">{{ money(c.open.gross) }} / {{ money(c.open.net) }}</td><td>—</td></tr>{% endif %}
-          {% else %}
-          <tr><td colspan="4" style="text-align:left" class="muted">Sin Credit Card Daily Summary del mes (se sube en Carga de Datos → EFT y Cupones).</td></tr>
-          {% endif %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  {% endif %}
 
   <div class="ci-cross">
     <h2>Cruce con el reporte mensual</h2>

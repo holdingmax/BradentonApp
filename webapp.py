@@ -2002,11 +2002,19 @@ def _proyecciones_back():
 @app.route("/proyecciones/margenes", methods=["POST"])
 def reportes_proyecciones_margenes():
     """
-    Los % teóricos de cada rubro. Se tipean como porcentaje ("15") y se
-    guardan como fracción (0.15), igual que el Excel Cierre. Un campo vacío o
+    Los % teóricos de cada rubro (Lottery incluido desde el 2026-11-24). Se
+    tipean como porcentaje ("15") y se guardan como fracción (0.15), igual que
+    el Excel Cierre. Valen desde el mes de la página en adelante: los meses
+    anteriores no cambian (proyecciones.save_margins). Un campo vacío o
     inválido no se toca (nunca se borra ni queda en 0 por accidente).
     """
     if not _require_admin("Solo un administrador puede cambiar los % de cada rubro."):
+        return _proyecciones_back()
+    try:
+        year, month = int(request.form.get("year", "")), int(request.form.get("month", ""))
+    except ValueError:
+        return _proyecciones_back()
+    if not (2000 <= year <= 2100 and 1 <= month <= 12):
         return _proyecciones_back()
     margins = {}
     for label, _members in DEPARTMENT_GROUPS:
@@ -2020,7 +2028,7 @@ def reportes_proyecciones_margenes():
         if 0 <= value <= 100:
             margins[label] = value / 100.0
     if margins:
-        reportes_db.save_department_margins(margins)
+        proyecciones.save_margins(year, month, margins)
     return _proyecciones_back()
 
 
@@ -8136,21 +8144,16 @@ def _monthly_cross(year, month, entries):
 def _cierre_checks(year, month, entries):
     """
     Lo que Control Cierre controla además de los asientos, para la página y
-    el PDF: las tarjetas contra J.H. (pedido del usuario, 2026-10-06) y los
-    pagos de Kia/Toyota que no aparecen en tarjetas.
+    el PDF: los pagos de Kia/Toyota que no aparecen en tarjetas. Las tarjetas
+    contra J.H. salieron del Cierre el 2026-11-24 (pedido del usuario: es de
+    Controles → Tarjetas).
     """
     if not entries:
-        return None, []
-    detail_groups = eft_db.get_detail_groups()
-    jh_cards = control_cierre.jh_cards_check(
-        entries, _card_detail_by_day(year, month, detail_groups),
-        _jh_month_checks(year, month, detail_groups)["coupons"],
-    )
-    kia_not_in_cards = control_tarjetas.kia_not_in_cards(
+        return []
+    return control_tarjetas.kia_not_in_cards(
         reportes_db.get_card_sales_by_date(), reportes_db.get_local_account_sales_by_date(),
         [f"{year:04d}-{month:02d}-{d:02d}" for d in range(1, calendar.monthrange(year, month)[1] + 1)],
     )
-    return jh_cards, kia_not_in_cards
 
 
 @app.route("/controles/cierre")
@@ -8163,7 +8166,7 @@ def controles_cierre():
     year, month = _cierre_month()
     entries = control_cierre.build_month_entries(_build_store_info_rows(year, month), year, month)
     monthly_report, cross = _monthly_cross(year, month, entries)
-    jh_cards, kia_not_in_cards = _cierre_checks(year, month, entries)
+    kia_not_in_cards = _cierre_checks(year, month, entries)
     # Después de los cruces: esos comparan lo cargado, sin el renglón reclasificado a mano.
     control_cierre.apply_difference_record(entries)
     section = next(s for s in CONTROLES_SECTIONS if s["key"] == "control_cierre")
@@ -8174,14 +8177,12 @@ def controles_cierre():
         entries=entries,
         monthly_report=monthly_report,
         cross=cross,
-        jh_cards=jh_cards,
         fmt_ddmm=lambda iso: f"{iso[8:10]}/{iso[5:7]}",
         fmt_days=lambda days: ", ".join(f"{iso[8:10]}/{iso[5:7]}" for iso in days),
         notice=control_cierre.missing_notice(entries) if entries else None,
         period_label=_cierre_period_label(entries) if entries else None,
         account_jh=control_cierre.ACCOUNT_JH,
         account_gettel=control_cierre.ACCOUNT_GETTEL,
-        lottery_note=control_cierre.LOTTERY_NOTE,
         account_tax_bgs=control_cierre.ACCOUNT_TAX_BGS,
         account_sale_tax=control_cierre.ACCOUNT_SALE_TAX,
         sale_tax_record=control_cierre.sale_tax_record(year, month),
@@ -8205,6 +8206,10 @@ def controles_cierre_sale_tax():
     year, month = _cierre_month()
     registered = request.form.get("registered") == "1"
     control_cierre.set_sale_tax_record(year, month, registered, request.form.get("asiento", ""))
+    # La página lo pide por fetch y cambia solo ese cuadro (2026-11-24: desmarcar
+    # tardaba porque se rearmaba todo el Control Cierre).
+    if request.accept_mimetypes.best == "application/json":
+        return jsonify(record=control_cierre.sale_tax_record(year, month))
     return redirect(url_for("controles_cierre", year=year, month=month) + "#ci-sale-tax")
 
 
@@ -8243,14 +8248,14 @@ def controles_cierre_pdf():
     if not entries:
         flash("No hay ningún Store Info guardado ese mes: no hay asientos para exportar.", "error")
         return redirect(url_for("controles_cierre", year=year, month=month))
-    jh_cards, kia_not_in_cards = _cierre_checks(year, month, entries)
+    kia_not_in_cards = _cierre_checks(year, month, entries)
     cross = _monthly_cross(year, month, entries)[1]
     control_cierre.apply_difference_record(entries)
     dest_path = os.path.join(tempfile.mkdtemp(prefix="cierre_pdf_"), f"Control Cierre {month:02d}-{year}.pdf")
     control_cierre.build_entries_pdf(
         entries, f"Control Cierre — {_MONTH_NAMES_ES[month - 1]} {year}", _cierre_period_label(entries), dest_path,
         cross=cross,
-        jh_cards=jh_cards, kia_not_in_cards=kia_not_in_cards,
+        kia_not_in_cards=kia_not_in_cards,
         sale_tax_record=control_cierre.sale_tax_record(year, month),
         sale_tax_due=month_end_warnings_due(year, month),
         month_name=_MONTH_NAMES_ES[month - 1],

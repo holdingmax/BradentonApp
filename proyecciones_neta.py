@@ -233,23 +233,14 @@ def build_net(year, month, projection=None):
         bce=(real["ventas_cstore"] - real["costo_cstore"]) if bce("ventas_cstore", "costo_cstore") is not None else None,
         key="cstore")
 
-    lot = p["lottery"]
-    if lot["estimated"]:
-        lot_source = "Sin comisiones cargadas: la venta de LOTTO × el % teórico"
-    else:
-        lot_source = (f"Lottery: semanas del {lot['first'].strftime('%d/%m')} al {lot['last'].strftime('%d/%m')}, "
-                      f"{lot['days_loaded']} de {lot['days_total']} días con comisión")
-    if lot["estimated"]:
-        lot_proj_text = "Sin comisiones cargadas: la venta de LOTTO proyectada × el % teórico"
-    elif lot["days_loaded"] < lot["days_total"]:
-        lot_proj_text = (f"Comisiones {_money(lot['comm'])} ÷ {lot['days_loaded']} días con comisión"
-                         f" × {lot['days_total']} días de las semanas del mes = {_money(lot['comm_proj'])}")
-    else:
-        lot_proj_text = f"Todas las semanas del mes cargadas: {_money(lot['comm_proj'])}"
-    lottery = _group("Lottery", [_line("Comisiones On-Line y Skoff", lot_source, lot["comm"] or 0.0, lot["comm_proj"],
-                                       formula={"actual": "On-Line + Skoff de las semanas que se pagan en el mes",
-                                                "proj": lot_proj_text})],
-                     bce=bce("comisiones_lottery"))
+    # Lottery por su % teórico, como en el Panel (pedido del usuario, 2026-11-24).
+    lotto = next(r for r in p["cstore"]["rubros"] if r.get("lottery"))
+    lottery = _group("Lottery", [_line(
+        "Venta de LOTTO", f"Close Store × {lotto['margin'] * 100:.2f} %", lotto["utilidad"], lotto["utilidad_proj"],
+        formula={"actual": f"Vendido {_money(lotto['amount'])} × {lotto['margin'] * 100:.2f} % = {_money(lotto['utilidad'])}",
+                 "proj": (f"Proyectado {_money(lotto['proj'])} × {lotto['margin'] * 100:.2f} % = {_money(lotto['utilidad_proj'])}"
+                          if lotto["proj"] is not None else None)})],
+        bce=bce("comisiones_lottery"))
 
     others = _group("Otros ingresos", [
         chase_line("Máquina de hielo", ICE),

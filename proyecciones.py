@@ -30,7 +30,7 @@ import reportes_db
 from reporte_diario import DEPARTMENT_GROUPS, group_department_sales
 
 # Los % teóricos del Excel Cierre (fila Margen, abajo de cada rubro). Son el
-# default; el que se usa sale de reportes_db.get_department_margins.
+# default; el que se usa sale de margins_for_month.
 DEFAULT_MARGINS = {
     "TABACCO": 0.15,
     "SODA": 0.40,
@@ -52,6 +52,49 @@ CATEGORY_DISPLAY_LABELS = {
 # Los rubros que el Balance cuenta como "Ventas C-Store".
 BALANCE_CSTORE = ("TABACCO", "SODA", "BEER/WINE", "RESTO")
 CHECKPOINT_DAYS = (7, 15, 22)
+
+
+# Los % que no se editan en la página: Kia / Toyota no es ganancia.
+FIXED_MARGINS = ("Gettel",)
+
+
+def _month_key(year, month):
+    return f"{year:04d}-{month:02d}"
+
+
+def margins_for_month(year, month):
+    """
+    Los % teóricos que valen para un mes (pedido del usuario, 2026-11-24:
+    "si una persona cambia los márgenes del mes actual, solo los meses
+    siguientes van a quedar como el actual, pero los meses pasados no se van
+    a tocar"). Vale el último cambio guardado de ese mes o de uno anterior;
+    sin ninguno, los de antes de este cambio (reportes_db, iguales para todos
+    los meses) y, si tampoco, los del Excel Cierre.
+    """
+    base = reportes_db.get_department_margins(DEFAULT_MARGINS)
+    stored = config_store.read(config_store.PROYECCIONES_MARGENES) or {}
+    key = _month_key(year, month)
+    earlier = [k for k in stored if k <= key]
+    if earlier:
+        base.update({label: value for label, value in stored[max(earlier)].items() if label in base})
+    for label in FIXED_MARGINS:
+        base[label] = DEFAULT_MARGINS[label]
+    return base
+
+
+def save_margins(year, month, changes):
+    """
+    Guarda los % del mes (`changes`, {rubro: fracción}) para ese mes y los que
+    siguen: los cambios de meses posteriores se borran y los anteriores
+    quedan como estaban.
+    """
+    margins = margins_for_month(year, month)
+    margins.update({label: value for label, value in changes.items() if label in margins and label not in FIXED_MARGINS})
+    stored = config_store.read(config_store.PROYECCIONES_MARGENES) or {}
+    key = _month_key(year, month)
+    stored = {k: v for k, v in stored.items() if k < key}
+    stored[key] = {label: value for label, value in margins.items() if label not in FIXED_MARGINS}
+    config_store.write(config_store.PROYECCIONES_MARGENES, stored)
 
 
 def _project(actual, days_loaded, days_in_month):
@@ -207,7 +250,7 @@ def _summary(year, month, days, margins, upto=None):
 
 def build_projection(year, month):
     """Todo lo que muestra la página de Proyecciones para un mes."""
-    margins = reportes_db.get_department_margins(DEFAULT_MARGINS)
+    margins = margins_for_month(year, month)
     days = _month_days(year, month)
     result = _summary(year, month, days, margins)
     result.update({"year": year, "month": month, "days": days, "balance": None})
@@ -241,15 +284,16 @@ def build_projection(year, month):
 
 def _add_lottery(year, month, result, margins):
     """
-    Lottery deja de ir por % teórico: su utilidad es la comisión real de las
-    semanas que se pagan en el mes (lottery_commissions), y el C-Store suma
-    esa comisión, como la Nota 3 del Bce. Kia / Toyota no es ganancia (es
-    combustible a cuenta): queda afuera.
+    Lottery va por su % teórico, como los demás rubros (pedido del usuario,
+    2026-11-24: "Manda el % teórico"; antes era la comisión real). La comisión
+    real de las semanas que se pagan en el mes (lottery_commissions) queda
+    como referencia, y el C-Store con Lottery suma la utilidad teórica.
+    Kia / Toyota no es ganancia (es combustible a cuenta): queda afuera.
     """
     cstore = result["cstore"]
     lotto = next(r for r in cstore["rubros"] if r["label"] == "LOTERY/LOTTO")
-    lot = lottery_commissions(year, month, lotto["proj"], lotto["margin"])
-    lotto.update({"lottery": True, "utilidad": lot["comm"], "utilidad_proj": lot["comm_proj"], "margin": lot["rate"]})
+    lot = lottery_commissions(year, month)
+    lotto.update({"lottery": True, "comm_real": lot["comm"], "rate_real": lot["rate"]})
     result["lottery"] = lot
 
     def plus(a, b):
@@ -258,9 +302,9 @@ def _add_lottery(year, month, result, margins):
     base = cstore["balance"]
     with_lottery = {
         "amount": plus(base["amount"], lotto["amount"]),
-        "utilidad": plus(base["utilidad"], lot["comm"]),
+        "utilidad": plus(base["utilidad"], lotto["utilidad"]),
         "proj": plus(base["proj"], lotto["proj"]),
-        "utilidad_proj": plus(base["utilidad_proj"], lot["comm_proj"]),
+        "utilidad_proj": plus(base["utilidad_proj"], lotto["utilidad_proj"]),
     }
     with_lottery["margin"] = _ratio(with_lottery["utilidad"], with_lottery["amount"])
     with_lottery["margin_proj"] = _ratio(with_lottery["utilidad_proj"], with_lottery["proj"])
@@ -357,25 +401,34 @@ def formulas(p):
         "rubros": {},
     }
 
+    def per_day(label, actual, unit=_money):
+        if actual is None or not n:
+            return None
+        return f"{label} hasta hoy {unit(actual)} ÷ {days} = {unit(actual / n)} por día"
+
+    def cost(block):
+        if block["cost"] is None:
+            return "Sin PPP no se puede calcular: falta el inventario inicial o las facturas del mes en Físico."
+        return f"{_gal(block['gallons'])} × PPP {_money(ppp, 4)} = {_money(block['cost'])}"
+
+    out["fuel_day"] = {
+        "gallons": per_day("Galones", fuel["gallons"], _gal),
+        "sales": per_day("Venta", fuel["sales"]),
+        "utilidad": per_day("Utilidad", fuel["utilidad"]),
+    }
+    out["fuel_cost"] = cost(fuel)
+    out["fuel_cost_proj"] = cost(fuel_proj)
+
     cstore = p["cstore"]
     lot = p.get("lottery") or {}
     for r in cstore["rubros"]:
-        if r.get("lottery"):
-            if lot.get("estimated"):
-                util_proj = "Sin comisiones cargadas: la venta de LOTTO proyectada × el % teórico"
-            elif lot.get("days_loaded", 0) < lot.get("days_total", 0):
-                util_proj = (f"Comisiones {_money(lot['comm'])} ÷ {lot['days_loaded']} días con comisión"
-                             f" × {lot['days_total']} días de las semanas del mes = {_money(lot['comm_proj'])}")
-            else:
-                util_proj = f"Todas las semanas del mes cargadas: {_money(lot.get('comm_proj'))}"
-            util = "Comisión real On-Line + Skoff de las semanas que se pagan a Chase en el mes"
-            margin = (f"Comisión {_money(lot.get('comm'))} ÷ lo vendido {_money(lot.get('sales'))} = {_pct(r['margin'])}"
-                      if r["margin"] is not None else None)
-        else:
-            util = f"Vendido {_money(r['amount'])} × {_pct(r['margin'])} teórico = {_money(r['utilidad'])}"
-            util_proj = (f"Proyectado {_money(r['proj'])} × {_pct(r['margin'])} teórico = {_money(r['utilidad_proj'])}"
-                         if r["proj"] is not None else None)
-            margin = "El % teórico del rubro (lo cambia el admin acá mismo)"
+        util = f"Vendido {_money(r['amount'])} × {_pct(r['margin'])} teórico = {_money(r['utilidad'])}"
+        util_proj = (f"Proyectado {_money(r['proj'])} × {_pct(r['margin'])} teórico = {_money(r['utilidad_proj'])}"
+                     if r["proj"] is not None else None)
+        margin = "El % teórico del rubro (lo cambia el admin acá mismo, desde este mes en adelante)"
+        if r.get("lottery") and not lot.get("estimated"):
+            margin += (f"\nComisión real On-Line + Skoff de las semanas que se pagan en el mes: {_money(lot.get('comm'))}"
+                       f" ÷ lo vendido {_money(lot.get('sales'))} = {_pct(lot.get('rate'))}")
         out["rubros"][r["label"]] = {
             "amount": f"{r['display']}: suma de los {days} del Close Store (Ventas por Departamento)",
             "margin": margin,
@@ -406,9 +459,9 @@ def formulas(p):
     out["cstore_lottery"] = {
         "amount": f"C-Store {_money(cs['amount'])} + LOTTO {_money(lotto['amount'])} = {_money(cwl['amount'])}",
         "proj": f"C-Store {_money(cs['proj'])} + LOTTO {_money(lotto['proj'])} = {_money(cwl['proj'])}",
-        "utilidad": f"Utilidad de los rubros {_money(cs['utilidad'])} + comisión Lottery {_money(lot.get('comm'))} = {_money(cwl['utilidad'])}",
-        "utilidad_proj": (f"Utilidad de los rubros {_money(cs['utilidad_proj'])} + comisión Lottery "
-                          f"{_money(lot.get('comm_proj'))} = {_money(cwl['utilidad_proj'])}"),
+        "utilidad": f"Utilidad de los rubros {_money(cs['utilidad'])} + Lottery {_money(lotto['utilidad'])} = {_money(cwl['utilidad'])}",
+        "utilidad_proj": (f"Utilidad de los rubros {_money(cs['utilidad_proj'])} + Lottery "
+                          f"{_money(lotto['utilidad_proj'])} = {_money(cwl['utilidad_proj'])}"),
         "margin": f"Utilidad {_money(cwl['utilidad'])} ÷ venta {_money(cwl['amount'])} = {_pct(cwl['margin'])}"
                   if cwl["margin"] is not None else None,
     }

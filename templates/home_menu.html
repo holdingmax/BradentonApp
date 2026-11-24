@@ -8,7 +8,11 @@
   .home-menu-header p { font-size: 14px; color: var(--text-soft); margin: 0; }
   .home-menu-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    /* Cada tarjeta del ancho de un tercio, como cuando había tres: con dos
+       (Reportes escondido) no se estiran, quedan centradas (pedido del
+       usuario, 2026-11-24). */
+    grid-template-columns: repeat(auto-fit, minmax(260px, calc((100% - 40px) / 3)));
+    justify-content: center;
     gap: 20px;
   }
   .home-menu-card {

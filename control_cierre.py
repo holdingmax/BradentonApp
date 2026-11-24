@@ -634,9 +634,6 @@ def build_entries_pdf(entries, title, period_label, dest_path, cross=None, jh_ca
         bold_rows=(totals_row,), plain_rows=(lottery_row,),
     ))
     elements.append(Spacer(1, 6))
-    elements.append(Paragraph(LOTTERY_NOTE, note_style))
-    diff_style = ParagraphStyle("CierreDiff", parent=styles["Normal"], fontName="Helvetica-Bold", textColor=red)
-    elements.append(Paragraph(f"Diferencia Debe − Haber: {_money(entries['difference'])}", diff_style))
     elements.append(Spacer(1, 18))
 
     # Asiento de lo cobrado a Gettel KIA.

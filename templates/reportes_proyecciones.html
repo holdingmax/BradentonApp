@@ -219,7 +219,7 @@
     </div>
   </div>
   <p class="muted proy-note">
-    Lottery es la comisión real de las semanas que se pagan en el mes, no lo vendido.
+    Lottery es la venta de LOTTO por su % teórico.
     Kia / Toyota no entra: es combustible a cuenta, no ganancia.
   </p>
   {% else %}
@@ -246,7 +246,8 @@
         <span></span><span class="proy-sum-head">Hasta hoy</span><span class="proy-sum-head proy-sum-head-proj">Proyectado</span>
         <span>Venta</span><strong{{ fx(f.cstore.amount) }}>{{ money(cs.amount, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.cstore.proj) }}>{{ money(cs.proj, 0) }}</strong>
         <span>Utilidad de los rubros</span><strong{{ fx(f.cstore.utilidad) }}>{{ money(cs.utilidad, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.cstore.utilidad_proj) }}>{{ money(cs.utilidad_proj, 0) }}</strong>
-        <span>Comisión Lottery</span><strong{{ fx(f.rubros["LOTERY/LOTTO"].utilidad) }}>{{ money(lot.comm, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.rubros["LOTERY/LOTTO"].utilidad_proj) }}>{{ money(lot.comm_proj, 0) }}</strong>
+        {% set lr = p.cstore.rubros|selectattr("lottery")|first %}
+        <span>Utilidad Lottery</span><strong{{ fx(f.rubros["LOTERY/LOTTO"].utilidad) }}>{{ money(lr.utilidad, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.rubros["LOTERY/LOTTO"].utilidad_proj) }}>{{ money(lr.utilidad_proj, 0) }}</strong>
         <span>Utilidad</span><strong{{ fx(f.cstore_lottery.utilidad) }}>{{ money(cwl.utilidad, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.cstore_lottery.utilidad_proj) }}>{{ money(cwl.utilidad_proj, 0) }}</strong>
         <span>Margen</span><strong{{ fx(f.cstore.margin) }}>{{ pct(cs.margin) }}</strong><span></span>
       </div>
@@ -264,26 +265,57 @@
 {# ---------------- Combustible ---------------- #}
 <div class="card">
   <h2 class="proy-unit-title">{{ icon_fuel() }}Combustible</h2>
-  <div class="proy-stat-grid">
-    {% for label, key, kind, fk in [("Galones", "gallons", "gal", "fuel_gallons"), ("Venta", "sales", "$", "fuel_sales"), ("Utilidad", "utilidad", "$", "fuel_util")] %}
-    <div class="proy-stat">
-      <div class="proy-stat-label">{{ label }}</div>
-      <div class="proy-stat-actual"><span{{ fx(f[fk]) }}>{% if kind == "gal" %}{{ num(p.fuel[key]) }}{% else %}{{ money(p.fuel[key]) }}{% endif %}</span></div>
-      <div class="proy-stat-proj-row">
-        <span class="proy-legend-chip proy-legend-proj">Proyectado</span>
-        <span class="proy-stat-proj-value"{{ fx(f[fk ~ "_proj"]) }}>{% if kind == "gal" %}{{ num(p.fuel_proj[key]) }}{% else %}{{ money(p.fuel_proj[key]) }}{% endif %}</span>
-      </div>
-    </div>
-    {% endfor %}
-    <div class="proy-stat">
-      <div class="proy-stat-label">Por galón</div>
-      <div class="proy-per-gal">
-        <span>Precio de venta</span><strong{{ fx(f.fuel_price) }}>{{ money(p.fuel.price, 4) }}</strong>
-        <span>Costo (PPP)</span><strong{{ fx(f.ppp) }}>{{ money(p.ppp, 4) }}</strong>
-        <span>Margen</span><strong class="{{ 'proy-neg' if p.fuel.margin_gal is not none and p.fuel.margin_gal < 0 }}"{{ fx(f.fuel_margin_gal) }}>{{ money(p.fuel.margin_gal, 4) }}</strong>
-      </div>
-    </div>
+  {# Cómo se proyecta, como el cuadro del C-Store (pedido del usuario, 2026-11-24). #}
+  {% set n, dm = p.days_loaded, p.days_in_month %}
+  <div class="historial-table-wrap">
+    <table class="historial-table proy-num-table">
+      <thead>
+        <tr><th>Concepto</th><th>Hasta hoy<span class="proy-th-sub">{{ n }} día{{ '' if n == 1 else 's' }} cargado{{ '' if n == 1 else 's' }}</span></th><th>Por día</th><th>Proyectado<span class="proy-th-sub">por día × {{ dm }} días</span></th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Galones</td>
+          <td><span{{ fx(f.fuel_gallons) }}>{{ num(p.fuel.gallons) }}</span></td>
+          <td><span{{ fx(f.fuel_day.gallons) }}>{{ num(p.fuel.gallons / n) if n and p.fuel.gallons is not none else '—' }}</span></td>
+          <td class="proy-cell-proj"><span{{ fx(f.fuel_gallons_proj) }}>{{ num(p.fuel_proj.gallons) }}</span></td>
+        </tr>
+        <tr>
+          <td>Venta<span class="proy-th-sub">Sales Fuel + Desc. Comb</span></td>
+          <td><span{{ fx(f.fuel_sales) }}>{{ money(p.fuel.sales) }}</span></td>
+          <td><span{{ fx(f.fuel_day.sales) }}>{{ money(p.fuel.sales / n) if n and p.fuel.sales is not none else '—' }}</span></td>
+          <td class="proy-cell-proj"><span{{ fx(f.fuel_sales_proj) }}>{{ money(p.fuel_proj.sales) }}</span></td>
+        </tr>
+        <tr>
+          <td>Costo<span class="proy-th-sub">galones × PPP {{ money(p.ppp, 4) }}</span></td>
+          <td><span{{ fx(f.fuel_cost) }}>{{ money(p.fuel.cost) }}</span></td>
+          <td>—</td>
+          <td class="proy-cell-proj"><span{{ fx(f.fuel_cost_proj) }}>{{ money(p.fuel_proj.cost) }}</span></td>
+        </tr>
+        <tr class="reporte-totals-row">
+          <td>Utilidad<span class="proy-th-sub">venta − costo</span></td>
+          <td><span{{ fx(f.fuel_util) }}>{{ money(p.fuel.utilidad) }}</span></td>
+          <td><span{{ fx(f.fuel_day.utilidad) }}>{{ money(p.fuel.utilidad / n) if n and p.fuel.utilidad is not none else '—' }}</span></td>
+          <td class="proy-cell-proj"><span{{ fx(f.fuel_util_proj) }}>{{ money(p.fuel_proj.utilidad) }}</span></td>
+        </tr>
+        <tr>
+          <td>Precio de venta por galón</td>
+          <td><span{{ fx(f.fuel_price) }}>{{ money(p.fuel.price, 4) }}</span></td>
+          <td>—</td>
+          <td class="proy-cell-proj">{{ money(p.fuel_proj.price, 4) }}</td>
+        </tr>
+        <tr>
+          <td>Margen por galón<span class="proy-th-sub">precio − PPP</span></td>
+          <td class="{{ 'proy-neg' if p.fuel.margin_gal is not none and p.fuel.margin_gal < 0 }}"><span{{ fx(f.fuel_margin_gal) }}>{{ money(p.fuel.margin_gal, 4) }}</span></td>
+          <td>—</td>
+          <td class="proy-cell-proj {{ 'proy-neg' if p.fuel_proj.margin_gal is not none and p.fuel_proj.margin_gal < 0 }}">{{ money(p.fuel_proj.margin_gal, 4) }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
+  <p class="muted proy-note">
+    Proyectado = lo de los {{ n }} día{{ '' if n == 1 else 's' }} cargado{{ '' if n == 1 else 's' }} ÷ {{ n }} × {{ dm }} días del mes (galones y venta, al mismo ritmo).
+    El costo es esos galones al PPP del mes, y la utilidad, venta − costo: el precio y el margen por galón quedan iguales.
+  </p>
   <p class="muted proy-note">
     PPP como la hoja Físico: (inventario inicial + facturas de J.H. del mes) / (galones iniciales + comprados).
     Inventario inicial: {{ num(p.fuel_initial.gallons) }} gal por {{ money(p.fuel_initial.amount) }} ({{ fuel_sources.get(p.fuel_initial.source, p.fuel_initial.source) }}),
@@ -316,12 +348,16 @@
             <td class="proy-cell-proj">—</td>
           </tr>
           {% elif r.lottery %}
-          {# Lottery: la comisión real de las semanas que se pagan en el mes, y su % sobre lo vendido. #}
+          {# Lottery por su % teórico, como los demás rubros; la comisión real queda de referencia (2026-11-24). #}
           <tr>
-            <td>{{ r.display }} <span class="proy-th-sub">comisión real</span></td>
+            <td>{{ r.display }}{% if r.rate_real is not none %} <span class="proy-th-sub"{{ fx(f.rubros[r.label].margin) }}>comisión real {{ pct(r.rate_real) }}</span>{% endif %}</td>
             {% set fr = f.rubros[r.label] %}
             <td><span{{ fx(fr.amount) }}>{{ money(r.amount) }}</span></td>
-            <td><span{{ fx(fr.margin) }}>{{ pct(r.margin) }}</span></td>
+            <td>
+              {% if is_admin %}
+              <input type="number" step="0.01" min="0" max="100" class="proy-margin-input" name="margin_{{ r.label }}" value="{{ '%.2f'|format(r.margin * 100) }}"> %
+              {% else %}<span{{ fx(fr.margin) }}>{{ pct(r.margin) }}</span>{% endif %}
+            </td>
             <td><span{{ fx(fr.utilidad) }}>{{ money(r.utilidad) }}</span></td>
             <td class="proy-cell-proj"><span{{ fx(fr.proj) }}>{{ money(r.proj) }}</span></td>
             <td class="proy-cell-proj"><span{{ fx(fr.utilidad_proj) }}>{{ money(r.utilidad_proj) }}</span></td>
@@ -355,15 +391,13 @@
         </tbody>
       </table>
     </div>
-    {% if is_admin %}<div class="proy-actions"><button type="submit">Guardar %</button></div>{% endif %}
+    {% if is_admin %}<div class="proy-actions action-row"><button type="submit">Guardar %</button><span class="muted">Vale para {{ month_name|lower }} {{ year }} y los meses siguientes; los anteriores no cambian.</span></div>{% endif %}
   </form>
   <p class="muted proy-note">
-    {% if lot.estimated %}
-    Lottery: todavía no hay comisiones cargadas de las semanas del mes, así que va la venta de LOTTO por su % teórico.
-    {% else %}
-    Lottery: la comisión real (On-Line + Skoff) de las semanas que se pagan a Chase en el mes, del {{ lot.first.strftime('%d/%m') }} al {{ lot.last.strftime('%d/%m') }}
-    ({{ lot.days_loaded }} de {{ lot.days_total }} días cargados), como el Excel de Lottery y la cuenta 4.10 del Bce. La última semana de un mes que se paga en el siguiente cuenta en el siguiente.
-    Del 27/07 al 11/10/2026 la comisión fue el 5,97 % de lo vendido; por semana varía de 3 % a 7 % porque la de Skoff se cobra sobre los libros liquidados.
+    Lottery va por su % teórico, como los demás rubros.
+    {% if not lot.estimated %}
+    Como referencia, la comisión real (On-Line + Skoff) de las semanas que se pagan a Chase en el mes, del {{ lot.first.strftime('%d/%m') }} al {{ lot.last.strftime('%d/%m') }}
+    ({{ lot.days_loaded }} de {{ lot.days_total }} días cargados), fue {{ money(lot.comm) }}: el {{ pct(lot.rate) }} de lo vendido.
     {% endif %}
   </p>
 </div>

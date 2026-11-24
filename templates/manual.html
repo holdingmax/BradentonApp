@@ -625,7 +625,7 @@
         <li><span class="n">6</span><p>Si el asiento no cierra y ya sabés por qué (un prepago, un ajuste): <b>Reclasificar a una cuenta</b> y escribí la cuenta de Ratio, o <b>Marcar como revisada</b> con una nota. El importe viene con la diferencia.</p></li>
         <li><span class="n">7</span><p><b>Guardar</b>. Reclasificada, el asiento suma ese renglón y cierra; revisada, queda igual pero en verde. <b>Deshacer</b> la saca.</p></li>
       </ol>
-      <div class="manual-tip"><b>Tené en cuenta:</b> si después cambia algún día del mes, la diferencia marcada deja de valer y la página avisa. Más abajo están el cruce de las tarjetas con J.H. y el cruce con el reporte mensual. <b>Exportar</b>, al final: el control entero en PDF, o en Excel.</div>
+      <div class="manual-tip"><b>Tené en cuenta:</b> si después cambia algún día del mes, la diferencia marcada deja de valer y la página avisa. Más abajo está el cruce con el reporte mensual (las tarjetas contra J.H. se miran en Controles → Tarjetas). <b>Exportar</b>, al final: el control entero en PDF, o en Excel.</div>
     </section>
 
     <section class="manual-module" id="c-lottery" style="--c: #B45309">
@@ -762,13 +762,17 @@
         <li><span class="n">1</span><p>Elegí el mes. La barra dice cuántos días tienen el Close Store cargado.</p></li>
         <li><span class="n">2</span><p><b>Utilidad neta proyectada</b>. Tocala (Ver desglose) para el detalle.</p></li>
         <li><span class="n">3</span><p>La venta proyectada de combustible y del C-Store.</p></li>
-        <li><span class="n">4</span><p>La utilidad bruta de cada unidad y de cada rubro del C-Store. Lottery es la comisión real de las semanas que se pagan en el mes.</p></li>
+        <li><span class="n">4</span><p>La utilidad bruta de cada unidad y de cada rubro del C-Store.</p></li>
+      </ol>
+      {{ shot('proyecciones-combustible', 'Cómo se proyecta el combustible') }}
+      <ol class="manual-steps" start="5">
+        <li><span class="n">5</span><p>Combustible: lo de los días cargados, lo que da por día y lo proyectado (por día × los días del mes). El costo es galones × PPP y la utilidad, venta − costo.</p></li>
       </ol>
       {{ shot('proyecciones-rubro', 'C-Store por rubro y Control contra el Balance') }}
-      <ol class="manual-steps" start="5">
-        <li><span class="n">5</span><p>C-Store por rubro: lo vendido, el % teórico de utilidad y lo proyectado. El % de cada rubro se puede cambiar.</p></li>
-        <li><span class="n">6</span><p><b>Guardar %</b> después de cambiarlo.</p></li>
-        <li><span class="n">7</span><p><b>Control contra el Balance</b>: con el mes cerrado, subí el Excel del Bce (hoja BALANCE HISTORICO). Se ve lo real al lado de lo proyectado.</p></li>
+      <ol class="manual-steps" start="6">
+        <li><span class="n">6</span><p>C-Store por rubro: lo vendido, el % teórico de utilidad y lo proyectado. El % de cada rubro se puede cambiar, Lottery incluido (al lado, su comisión real como referencia).</p></li>
+        <li><span class="n">7</span><p><b>Guardar %</b> después de cambiarlo. Vale para el mes que estás mirando y los siguientes; los meses anteriores no cambian.</p></li>
+        <li><span class="n">8</span><p><b>Control contra el Balance</b>: con el mes cerrado, subí el Excel del Bce (hoja BALANCE HISTORICO). Se ve lo real al lado de lo proyectado.</p></li>
       </ol>
       <div class="manual-tip"><b>Tené en cuenta:</b>
         <ul>
