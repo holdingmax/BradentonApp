@@ -17,7 +17,7 @@ Solo lo vigente. El Estado actual largo de los chats 19 a 34 (con todos los pend
   - **Flask lee el `.env` solo** (`app.run`): con una URL de Render en el `.env`, la app de la PC se conecta a Render. No levantarla mientras el `.env` tenga la URL (arreglo propuesto: `load_dotenv=False`).
   - Los datos se copian una sola vez y **nunca se reprocesan desde el Drive**: se perderían correcciones a mano, asignaciones de Kia/Toyota, marcas de Sale Tax, reglas editadas y pagos históricos.
 - **Entorno**: la PC se reseteó el 20/10 (usuario `Usuario`); rearmado el 21/10 con las mismas rutas (HISTORIAL, "2026-10-21"). Docker Desktop anda desde el 12/11 (WSL2 instalado) y `bradenton-pg` está recreado con los datos al 22/10 (arranca solo con Docker).
-- **Git**: todo pusheado a dev y a producción (24/11, `9d916d7`: Cierre sin nota de Lottery ni Tarjetas contra J.H., Sale Tax sin recargar, tarjetas del Menú, combustible en Proyecciones, márgenes por mes y Lottery con % teórico). Docs de esta sesión sin commitear (CLAUDE.md y HISTORIAL).
+- **Git**: todo pusheado a dev y a producción (24/11, `9d916d7`: Cierre sin nota de Lottery ni Tarjetas contra J.H., Sale Tax sin recargar, tarjetas del Menú, combustible en Proyecciones, márgenes por mes y Lottery con % teórico). Docs en dev (`37f225c`).
   - Sin commitear: `.claude/settings.json`.
   - `Claude outputs/` queda sin versionar: tiene PDFs con datos del negocio, borradores y los respaldos de Excel.
   - Alfonso pide cada commit y cada push (`git push origin main`).
