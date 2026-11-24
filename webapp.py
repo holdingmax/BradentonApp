@@ -1979,7 +1979,7 @@ def proyecciones_utilidad_neta():
     year, month = _proyecciones_month()
     return render_template(
         "proyecciones_neta.html",
-        net=proyecciones_neta.build_net(year, month),
+        net=proyecciones_neta.build_net(year, month, with_previous=True),
         accent="#7A6BB0",
         accent_soft="#F1EFF8",
         **_month_nav(year, month),

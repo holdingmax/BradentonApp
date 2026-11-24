@@ -38,6 +38,9 @@
   .proy-source.bad i { background: var(--error); }
   .proy-source.bad { border-color: #FECACA; background: #FEF2F2; }
   .proy-sources-note { flex-basis: 100%; text-align: center; color: var(--error); font-weight: 600; }
+  .neta-prev { color: var(--text-soft); border-left: 1px solid var(--border); }
+  .neta-up { color: var(--success); font-weight: 600; }
+  .neta-down { color: var(--error); font-weight: 600; }
   .neta-pending-list { margin-top: 4px; font-style: normal; }
   .neta-pending-list summary { font-weight: 600; }
   .neta-pending td { color: var(--text-soft); font-style: italic; border-top: 1px dashed var(--border); }
@@ -49,7 +52,8 @@
 {% macro money(v, d=2) %}{% if v is none %}—{% elif v < 0 %}−${{ ("{:,.%df}" % d).format(-v) }}{% else %}${{ ("{:,.%df}" % d).format(v) }}{% endif %}{% endmacro %}
 {% macro neg(v, d=2) %}{% if v is none %}—{% else %}{{ money(-v, d) }}{% endif %}{% endmacro %}
 {% set n = net %}
-{% set cols = 5 if n.has_bce else 4 %}
+{% set cols = 7 if n.has_bce else 6 %}
+{% macro var(v, cost=false) %}{% if v is none %}—{% else %}{% set good = v > 0.0005 if not cost else v < -0.0005 %}{% set bad = v < -0.0005 if not cost else v > 0.0005 %}<span class="{{ 'neta-up' if good else ('neta-down' if bad else '') }}">{{ '+' if v > 0 else '' }}{{ "{:.1f}".format(v * 100) }} %</span>{% endif %}{% endmacro %}
 
 {# El desglose de la utilidad neta proyectada (pedido del usuario, 2026-11-02): los renglones del
    "ESTADO RESULTADO" del Bce, cada uno con lo que se cargó hasta hoy, cómo cerraría el mes y,
@@ -111,7 +115,7 @@
     <table class="historial-table neta-table">
       <thead>
         <tr>
-          <th>Renglón</th><th class="neta-col-src">De dónde sale</th><th>Hasta hoy</th><th>Proyectado</th>
+          <th>Renglón</th><th class="neta-col-src">De dónde sale</th><th>Hasta hoy</th><th>Proyectado</th><th class="neta-prev">Mes anterior ({{ n.prev_label }})</th><th>Var.</th>
           {% if n.has_bce %}<th>Real (Bce)</th>{% endif %}
         </tr>
       </thead>
@@ -123,6 +127,7 @@
           <td class="neta-col-src"></td>
           <td><span{{ fx(g, "actual") }}>{{ money(g.actual) }}</span></td>
           <td class="neta-proj"><span{{ fx(g, "proj") }}>{{ money(g.proj) }}</span></td>
+          <td class="neta-prev">{{ money(g.prev) }}</td><td>{{ var(g.var) }}</td>
           {% if n.has_bce %}<td>{{ money(g.bce) }}</td>{% endif %}
         </tr>
         {% for ln in g.lines %}
@@ -131,6 +136,7 @@
           <td class="neta-col-src">{{ ln.source }}</td>
           <td><span{{ fx(ln, "actual") }}>{{ money(ln.actual) }}</span></td>
           <td class="neta-proj"><span{{ fx(ln, "proj") }}>{{ money(ln.proj) }}</span></td>
+          <td class="neta-prev">{{ money(ln.prev) }}</td><td>{{ var(ln.var) }}</td>
           {% if n.has_bce %}<td></td>{% endif %}
         </tr>
         {% endfor %}
@@ -139,6 +145,7 @@
           <td>Utilidad bruta</td><td class="neta-col-src"></td>
           <td><span{{ fx(n.gross, "actual") }}>{{ money(n.gross.actual) }}</span></td>
           <td class="neta-proj"><span{{ fx(n.gross, "proj") }}>{{ money(n.gross.proj) }}</span></td>
+          <td class="neta-prev">{{ money(n.gross.prev) }}</td><td>{{ var(n.gross.var) }}</td>
           {% if n.has_bce %}<td>{{ money(n.gross.bce) }}</td>{% endif %}
         </tr>
 
@@ -149,6 +156,7 @@
           <td class="neta-col-src">{{ ln.source }}</td>
           <td><span{{ fx(ln, "actual") }}>{{ neg(ln.actual) }}</span></td>
           <td class="neta-proj"><span{{ fx(ln, "proj") }}>{{ neg(ln.proj) }}</span></td>
+          <td class="neta-prev">{{ neg(ln.prev) }}</td><td>{{ var(ln.var, true) }}</td>
           {% if n.has_bce %}<td>{{ neg(ln.bce) }}</td>{% endif %}
         </tr>
         {% endfor %}
@@ -156,6 +164,7 @@
           <td>Total de gastos</td><td class="neta-col-src"></td>
           <td><span{{ fx(n.expenses, "actual") }}>{{ neg(n.expenses.actual) }}</span></td>
           <td class="neta-proj"><span{{ fx(n.expenses, "proj") }}>{{ neg(n.expenses.proj) }}</span></td>
+          <td class="neta-prev">{{ neg(n.expenses.prev) }}</td><td>{{ var(n.expenses.var, true) }}</td>
           {% if n.has_bce %}<td>{{ neg(n.expenses.bce) }}</td>{% endif %}
         </tr>
 
@@ -163,6 +172,7 @@
           <td>Utilidad neta</td><td class="neta-col-src"></td>
           <td><span{{ fx(n.net, "actual") }}>{{ money(n.net.actual) }}</span></td>
           <td><span{{ fx(n.net, "proj") }}>{{ money(n.net.proj) }}</span></td>
+          <td class="neta-prev">{{ money(n.net.prev) }}</td><td>{{ var(n.net.var) }}</td>
           {% if n.has_bce %}<td>{{ money(n.net.bce) }}</td>{% endif %}
         </tr>
         {% if n.pending.count %}
@@ -172,7 +182,7 @@
             <details class="neta-pending-list"><summary>Ver los movimientos</summary>
               {% for it in n.pending["items"] %}<div>{{ it.date[8:10] }}/{{ it.date[5:7] }} · {{ it.description }} · {{ money(it.amount) }}</div>{% endfor %}
             </details></td>
-          <td>{{ neg(n.pending.amount) }}</td><td>—</td>
+          <td>{{ neg(n.pending.amount) }}</td><td>—</td><td class="neta-prev"></td><td></td>
           {% if n.has_bce %}<td></td>{% endif %}
         </tr>
         {% endif %}

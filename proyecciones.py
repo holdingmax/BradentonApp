@@ -254,6 +254,32 @@ def _summary(year, month, days, margins, upto=None):
     }
 
 
+def _var(now, before):
+    """Variación de `now` contra `before` (0.12 = +12 %), o None."""
+    if now is None or not before:
+        return None
+    return (now - before) / abs(before)
+
+
+def previous_month(year, month):
+    """
+    El mes anterior completo, para comparar (pedido del usuario, 2026-11-24:
+    "falta la comparación contra el mes anterior"): combustible y C-Store por
+    rubro con lo vendido y la utilidad de ese mes (con sus propios %).
+    """
+    py, pm = (year - 1, 12) if month == 1 else (year, month - 1)
+    days = _month_days(py, pm)
+    summary = _summary(py, pm, days, margins_for_month(py, pm))
+    rubros = {r["label"]: r for r in summary["cstore"]["rubros"]}
+    balance = summary["cstore"]["balance"]
+    lotto = rubros["LOTERY/LOTTO"]
+    with_lottery = {"amount": (balance["amount"] or 0.0) + lotto["amount"],
+                    "utilidad": (balance["utilidad"] or 0.0) + lotto["utilidad"]}
+    return {"year": py, "month": pm, "days_loaded": summary["days_loaded"], "days_in_month": summary["days_in_month"],
+            "fuel": summary["fuel"], "rubros": rubros, "balance": balance, "with_lottery": with_lottery,
+            "discounts": summary["cstore"]["discounts"]["amount"]}
+
+
 def build_projection(year, month):
     """Todo lo que muestra la página de Proyecciones para un mes."""
     margins = margins_for_month(year, month)
@@ -285,6 +311,20 @@ def build_projection(year, month):
     if real:
         result["balance"] = _balance_control(year, month, days, margins, real)
     result["charts"] = _chart_data(year, month, result)
+    prev = previous_month(year, month)
+    # La variación de lo proyectado contra el mes anterior, por renglón.
+    prev["var"] = {
+        "rubros": {r["label"]: {"amount": _var(r["proj"], prev["rubros"][r["label"]]["amount"]),
+                                "utilidad": _var(r["utilidad_proj"], prev["rubros"][r["label"]]["utilidad"])}
+                   for r in result["cstore"]["rubros"]},
+        "balance": {"amount": _var(result["cstore"]["balance"]["proj"], prev["balance"]["amount"]),
+                    "utilidad": _var(result["cstore"]["balance"]["utilidad_proj"], prev["balance"]["utilidad"])},
+        "with_lottery": {"amount": _var(result["cstore"]["with_lottery"]["proj"], prev["with_lottery"]["amount"]),
+                         "utilidad": _var(result["cstore"]["with_lottery"]["utilidad_proj"], prev["with_lottery"]["utilidad"])},
+        "discounts": _var(result["cstore"]["discounts"]["proj"], prev["discounts"]),
+        "fuel": {k: _var(result["fuel_proj"][k], prev["fuel"][k]) for k in ("gallons", "sales", "cost", "utilidad", "price", "margin_gal")},
+    }
+    result["previous"] = prev
     return result
 
 

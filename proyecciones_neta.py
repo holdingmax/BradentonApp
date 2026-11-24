@@ -173,8 +173,41 @@ def _group(title, lines, bce=None, key=None):
     return group
 
 
-def build_net(year, month, projection=None):
-    """El desglose de la utilidad neta del mes: lo de hasta hoy, lo proyectado y lo real del Bce."""
+def _var(now, before):
+    if now is None or not before:
+        return None
+    return (now - before) / abs(before)
+
+
+def _attach_previous(net, prev):
+    """
+    Lo del mes anterior al lado de cada renglón, y la variación de lo
+    proyectado contra eso (pedido del usuario, 2026-11-24).
+    """
+    def put(obj, before):
+        obj["prev"] = before
+        obj["var"] = _var(obj.get("proj"), before)
+
+    prev_groups = {g["title"]: g for g in prev["gross_groups"]}
+    for g in net["gross_groups"]:
+        pg = prev_groups.get(g["title"])
+        put(g, pg["actual"] if pg else None)
+        prev_lines = {ln["label"]: ln for ln in (pg["lines"] if pg else [])}
+        for ln in g["lines"]:
+            put(ln, prev_lines[ln["label"]]["actual"] if ln["label"] in prev_lines else None)
+    prev_expenses = {ln["label"]: ln for ln in prev["expenses"]["lines"]}
+    for ln in net["expenses"]["lines"]:
+        put(ln, prev_expenses[ln["label"]]["actual"] if ln["label"] in prev_expenses else None)
+    for key in ("gross", "expenses", "net"):
+        put(net[key], prev[key]["actual"])
+    net["prev_label"] = f"{prev['month']:02d}/{prev['year']}"
+
+
+def build_net(year, month, projection=None, with_previous=False):
+    """
+    El desglose de la utilidad neta del mes: lo de hasta hoy, lo proyectado y
+    lo real del Bce. Con `with_previous`, también el mes anterior.
+    """
     p = projection or proyecciones.build_projection(year, month)
     days_in_month = calendar.monthrange(year, month)[1]
     prev_year, prev_month = _prev_month(year, month)
@@ -362,7 +395,7 @@ def build_net(year, month, projection=None):
     }
     net["formula"] = {field: f"Utilidad bruta {_money(gross[field])} − gastos {_money(expenses[field])} = {_money(net[field])}"
                       for field in ("actual", "proj")}
-    return {
+    result = {
         "year": year,
         "month": month,
         "days_in_month": days_in_month,
@@ -385,3 +418,6 @@ def build_net(year, month, projection=None):
         "bce_source": real.get("archivo") if real else None,
         "ppp_missing": p["ppp"] is None,
     }
+    if with_previous:
+        _attach_previous(result, build_net(prev_year, prev_month))
+    return result
