@@ -1209,3 +1209,41 @@ button.btn-accent.popover-trigger:hover { color: #fff; filter: brightness(0.92);
 /* Link de descarga mientras se arma el archivo (ver "Descargas sin
    recargar" en el script de abajo). */
 a[aria-busy="true"] { opacity: 0.55; pointer-events: none; }
+
+/* Cómo se calculó un dato: el cartel que aparece al pasar el cursor sobre
+   un elemento con data-formula (pedido del usuario, 2026-11-24; Panel de
+   proyecciones). Es uno solo para toda la página, fuera de las tablas, así
+   un contenedor con overflow no lo corta. */
+[data-formula] { text-decoration: underline dotted rgba(107, 114, 128, 0.55); text-underline-offset: 3px; }
+.formula-tip {
+  position: fixed; z-index: 2000; max-width: 380px; padding: 9px 12px;
+  background: #111827; color: #F9FAFB; border-radius: 8px; box-shadow: 0 8px 24px rgba(17, 24, 39, 0.25);
+  font-size: 12.5px; font-weight: 500; line-height: 1.45; white-space: pre-line; pointer-events: none;
+  font-variant-numeric: tabular-nums; text-align: left; text-transform: none; letter-spacing: normal;
+  opacity: 0; transform: translateY(2px); transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.formula-tip.show { opacity: 1; transform: none; }
+.formula-tip-title { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #9CA3AF; margin-bottom: 3px; }
+
+/* Fila de acción (pedido del usuario, 2026-11-24: "que se vea bien la
+   alineación de los botones como el de marcar como registrado y el Nº de
+   asiento, que no se vean mal alineados ni con tanta diferencia de
+   tamaño"): campos y botones en una misma fila, centrados y del mismo alto,
+   sin el margen de arriba que los botones traen por defecto. Con labels
+   arriba de cada campo, los campos y el botón se alinean por abajo. */
+.action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.action-row.action-row-labels { align-items: flex-end; }
+.action-row label { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: 12px; font-weight: 600; color: var(--text-soft); text-transform: none; letter-spacing: normal; }
+.action-row :is(button, a.btn-accent, a.btn-secondary) {
+  margin: 0; height: 38px; padding-top: 0; padding-bottom: 0; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; line-height: 1;
+}
+.action-row :is(input[type=text], input[type=number], input[type=date], input[type=month], select) {
+  display: inline-block; width: auto; height: 38px; box-sizing: border-box; margin: 0;
+  padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt);
+  color: var(--text); font: inherit; font-size: 13px;
+}
+.action-row :is(input[type=text], input[type=number], input[type=date], input[type=month], select):focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.action-row input[type=file] { width: auto; max-width: 100%; margin: 0; }

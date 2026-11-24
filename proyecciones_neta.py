@@ -108,15 +108,38 @@ def _caja_expenses(year, month):
     return sum(item["amount"] or 0.0 for day_items in items.values() for item in day_items)
 
 
-def _line(label, source, actual, proj, bce=None):
-    return {"label": label, "source": source, "actual": actual, "proj": proj, "bce": bce}
+def _money(value):
+    """$1,234.56 (−$1,234.56 en negativo), para los textos de las fórmulas."""
+    if value is None:
+        return "—"
+    return ("−$" if value < 0 else "$") + f"{abs(value):,.2f}"
+
+
+def _pace_text(actual, elapsed, days_in_month, previous, what=""):
+    """Cómo sale `_at_pace`, en palabras y con los números."""
+    if elapsed >= days_in_month:
+        return f"{_money(actual)}{what} (el mes completo)"
+    if elapsed:
+        return (f"{_money(actual)}{what} ÷ {elapsed} día{'' if elapsed == 1 else 's'} cargado{'' if elapsed == 1 else 's'}"
+                f" × {days_in_month} días del mes = {_money(actual * days_in_month / elapsed)}")
+    return f"sin nada cargado del mes: lo del mes anterior, {_money(previous)}"
+
+
+def _line(label, source, actual, proj, bce=None, formula=None):
+    return {"label": label, "source": source, "actual": actual, "proj": proj, "bce": bce, "formula": formula}
 
 
 def _group(title, lines, bce=None, key=None):
     def total(field):
         values = [ln[field] for ln in lines]
         return None if any(v is None for v in values) else sum(values)
-    return {"key": key, "title": title, "lines": lines, "actual": total("actual"), "proj": total("proj"), "bce": bce}
+    group = {"key": key, "title": title, "lines": lines, "actual": total("actual"), "proj": total("proj"), "bce": bce}
+    group["formula"] = {
+        field: (" + ".join(f"{ln['label']} {_money(ln[field])}" for ln in lines) + f" = {_money(group[field])}")
+        if len(lines) > 1 else None
+        for field in ("actual", "proj")
+    }
+    return group
 
 
 def build_net(year, month, projection=None):
@@ -140,17 +163,28 @@ def build_net(year, month, projection=None):
         """Un renglón de Chase: ingresos con sign=1, gastos con sign=-1 (quedan en positivo)."""
         actual = chase_amount(categories, sign, chase)
         proj = 0.0
+        steps = []
         for category in categories:
             now = chase_amount((category,), sign, chase)
             previous = chase_amount((category,), sign, chase_prev)
+            name = category or "sin categoría"
             if chase_elapsed >= days_in_month:
                 proj += now
+                steps.append(f"{name}: {_money(now)} (el mes completo)")
             elif category in MONTHLY:
                 proj += now if now else previous
+                steps.append(f"{name}: lo pagado en el mes, {_money(now)}" if now
+                             else f"{name}: todavía no se pagó, lo del mes anterior {_money(previous)}")
             elif category in FIXED:
                 proj += max(now, previous)
+                steps.append(f"{name}: el mayor entre el mes ({_money(now)}) y el mes anterior ({_money(previous)})")
             else:
                 proj += _at_pace(now, chase_elapsed, days_in_month, previous)
+                steps.append(f"{name}: " + _pace_text(now, chase_elapsed, days_in_month, previous))
+        formula = {
+            "actual": f"Chase del mes: {', '.join(categories) if any(categories) else 'débitos sin categoría'}",
+            "proj": "\n".join(steps) + (f"\nTotal: {_money(proj)}" if len(steps) > 1 else ""),
+        }
         names = ", ".join(categories) if categories else "sin categoría"
         if chase_elapsed >= days_in_month:
             how = ""
@@ -162,7 +196,7 @@ def build_net(year, month, projection=None):
             how = f"al ritmo hasta el {chase_until.strftime('%d/%m')}"
         else:
             how = ""
-        return _line(label, f"Chase: {names}" + (f" · {how}" if how else ""), actual, proj)
+        return _line(label, f"Chase: {names}" + (f" · {how}" if how else ""), actual, proj, formula=formula)
 
     real = proyecciones.balance_for_month(year, month)
 
@@ -175,15 +209,26 @@ def build_net(year, month, projection=None):
         return sign * sum(values)
 
     # ---------------- Utilidad bruta ----------------
+    def fuel_text(block):
+        if block["utilidad"] is None:
+            return "Sin PPP no se puede calcular: falta el inventario inicial o las facturas del mes en Físico."
+        return (f"Venta {_money(block['sales'])} − {block['gallons']:,.2f} gal × PPP {_money(p['ppp'])}"
+                f" = {_money(block['utilidad'])}")
+
     fuel = _group("Combustible", [
-        _line("Venta − costo (PPP)", "Close Store y Físico", p["fuel"]["utilidad"], p["fuel_proj"]["utilidad"]),
+        _line("Venta − costo (PPP)", "Close Store y Físico", p["fuel"]["utilidad"], p["fuel_proj"]["utilidad"],
+              formula={"actual": fuel_text(p["fuel"]), "proj": fuel_text(p["fuel_proj"])}),
         chase_line("Rebate de combustible", REBATE_FUEL),
     ], bce=(bce("ventas_combustible", "otros_ingresos_combustible") - real["costo_combustible"])
         if bce("ventas_combustible", "otros_ingresos_combustible", "costo_combustible") is not None else None)
 
     rubros = [r for r in p["cstore"]["rubros"] if r["in_balance"]]
     cstore = _group("C-Store", [
-        _line(r["display"], f"Close Store × {r['margin'] * 100:.0f} %", r["utilidad"], r["utilidad_proj"]) for r in rubros
+        _line(r["display"], f"Close Store × {r['margin'] * 100:.0f} %", r["utilidad"], r["utilidad_proj"], formula={
+            "actual": f"Vendido {_money(r['amount'])} × {r['margin'] * 100:.2f} % = {_money(r['utilidad'])}",
+            "proj": (f"Proyectado {_money(r['proj'])} × {r['margin'] * 100:.2f} % = {_money(r['utilidad_proj'])}"
+                     if r["proj"] is not None else None),
+        }) for r in rubros
     ] + [chase_line("Rebates", REBATE_CSTORE)],
         bce=(real["ventas_cstore"] - real["costo_cstore"]) if bce("ventas_cstore", "costo_cstore") is not None else None,
         key="cstore")
@@ -194,7 +239,16 @@ def build_net(year, month, projection=None):
     else:
         lot_source = (f"Lottery: semanas del {lot['first'].strftime('%d/%m')} al {lot['last'].strftime('%d/%m')}, "
                       f"{lot['days_loaded']} de {lot['days_total']} días con comisión")
-    lottery = _group("Lottery", [_line("Comisiones On-Line y Skoff", lot_source, lot["comm"] or 0.0, lot["comm_proj"])],
+    if lot["estimated"]:
+        lot_proj_text = "Sin comisiones cargadas: la venta de LOTTO proyectada × el % teórico"
+    elif lot["days_loaded"] < lot["days_total"]:
+        lot_proj_text = (f"Comisiones {_money(lot['comm'])} ÷ {lot['days_loaded']} días con comisión"
+                         f" × {lot['days_total']} días de las semanas del mes = {_money(lot['comm_proj'])}")
+    else:
+        lot_proj_text = f"Todas las semanas del mes cargadas: {_money(lot['comm_proj'])}"
+    lottery = _group("Lottery", [_line("Comisiones On-Line y Skoff", lot_source, lot["comm"] or 0.0, lot["comm_proj"],
+                                       formula={"actual": "On-Line + Skoff de las semanas que se pagan en el mes",
+                                                "proj": lot_proj_text})],
                      bce=bce("comisiones_lottery"))
 
     others = _group("Otros ingresos", [
@@ -210,7 +264,9 @@ def build_net(year, month, projection=None):
     if coupon_elapsed and coupon_elapsed < days_in_month:
         fees_source += f" · al ritmo hasta el {last_coupon.strftime('%d/%m')}"
     cards = _group("Gastos de tarjeta", [
-        _line("Fees de tarjeta", fees_source, -fees, -_at_pace(fees, coupon_elapsed, days_in_month, fees_prev)),
+        _line("Fees de tarjeta", fees_source, -fees, -_at_pace(fees, coupon_elapsed, days_in_month, fees_prev),
+              formula={"actual": "Fees de los cupones con fecha de venta en el mes",
+                       "proj": "Fees " + _pace_text(fees, coupon_elapsed, days_in_month, fees_prev)}),
     ], bce=bce("gastos_tarjeta", sign=-1))
 
     gross_groups = [fuel, cstore, lottery, others, cards]
@@ -218,7 +274,8 @@ def build_net(year, month, projection=None):
     # ---------------- Gastos ----------------
     store_elapsed = _elapsed(p["last_day"], year, month)
     caja = _caja_expenses(year, month)
-    caja_proj = _at_pace(caja, store_elapsed, days_in_month, _caja_expenses(prev_year, prev_month))
+    caja_prev = _caja_expenses(prev_year, prev_month)
+    caja_proj = _at_pace(caja, store_elapsed, days_in_month, caja_prev)
     expense_lines = []
     for field, label, categories in EXPENSES:
         line = chase_line(label, categories, sign=-1)
@@ -226,6 +283,11 @@ def build_net(year, month, projection=None):
             line["actual"] += caja
             line["proj"] += caja_proj
             line["source"] += " · Caja: gastos de efectivo"
+            line["formula"] = {
+                "actual": line["formula"]["actual"] + f" + gastos de Caja {_money(caja)}",
+                "proj": line["formula"]["proj"] + "\nCaja: " + _pace_text(caja, store_elapsed, days_in_month, caja_prev)
+                        + f"\nTotal: {_money(line['proj'])}",
+            }
         if not categories:
             # Intereses y Recargos no tiene categoría en Chase: solo aparece si el Bce lo trae.
             if not bce(field):
@@ -250,6 +312,10 @@ def build_net(year, month, projection=None):
         for field in ("actual", "proj")
     }
     net["bce"] = bce("resultado_neto")
+    gross["formula"] = {field: " + ".join(f"{g['title']} {_money(g[field])}" for g in gross_groups) + f" = {_money(gross[field])}"
+                        for field in ("actual", "proj")}
+    net["formula"] = {field: f"Utilidad bruta {_money(gross[field])} − gastos {_money(expenses[field])} = {_money(net[field])}"
+                      for field in ("actual", "proj")}
     return {
         "year": year,
         "month": month,

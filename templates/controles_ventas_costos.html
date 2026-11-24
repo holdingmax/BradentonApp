@@ -13,8 +13,6 @@
   .vc-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .vc-range { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin: 0; }
   .vc-range label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-soft); }
-  .vc-range select { margin: 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; }
-  .vc-range button { padding: 7px 16px; }
   .vc-count { margin: 0; font-size: 13px; color: var(--text-soft); }
   .vc-count strong { color: var(--text); }
   .vc-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
@@ -90,7 +88,7 @@
 {% else %}
 <div class="card">
   <div class="vc-top">
-    <form class="vc-range" method="get" action="{{ url_for('controles_ventas_costos') }}">
+    <form class="vc-range action-row action-row-labels" method="get" action="{{ url_for('controles_ventas_costos') }}">
       <label>Desde
         <select name="desde">
           {% for ym in available %}<option value="{{ ym[0] }}-{{ '%02d'|format(ym[1]) }}" {% if ym == start %}selected{% endif %}>{{ month_names[ym[1] - 1] }} {{ ym[0] }}</option>{% endfor %}
@@ -123,7 +121,7 @@
   <h2>Mail a Rick</h2>
   <p class="muted" style="margin: 0 0 12px;">Van los productos tildados en la columna "Mail" (de entrada, los que cambiaron de costo y siguen con el mismo precio). Armalo, revisalo y mandalo vos.</p>
   <div class="vc-mail">
-    <div class="vc-mail-actions">
+    <div class="vc-mail-actions action-row">
       <button type="button" id="vc-mail-build">Armar mail</button>
       <button type="button" class="btn-secondary" id="vc-mail-copy" disabled>Copiar</button>
       <a class="btn-secondary" id="vc-mail-open" href="#" hidden>Abrir en el mail</a>

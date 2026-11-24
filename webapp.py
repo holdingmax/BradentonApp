@@ -1625,7 +1625,7 @@ def home():
     criterio que el section-switch de `base.html`). `login()` redirige acá
     en vez de directo a `carga_datos_index`.
     """
-    return render_template("home_menu.html")
+    return render_template("home_menu.html", mostrar_reportes=MOSTRAR_REPORTES)
 
 
 @app.route("/excels")
@@ -1661,6 +1661,14 @@ def carga_datos_index():
     return render_template("carga_datos_index.html", tools=upload_tools)
 
 
+# La sección Reportes queda escondida hasta que se perfeccione (pedido del
+# usuario, 2026-11-24): sin tarjeta en el Menú, y su página manda al Menú. Los
+# PDF y Excel de cada reporte siguen andando (algunas páginas los enlazan,
+# como "Exportar Excel del mes" de Gettel). Para volver a mostrarla: True.
+MOSTRAR_REPORTES = False
+app.jinja_env.globals["mostrar_reportes"] = MOSTRAR_REPORTES
+
+
 @app.route("/carga-datos/reportes")
 def carga_datos_reportes():
     """
@@ -1673,6 +1681,8 @@ def carga_datos_reportes():
     Cupones, Reporte Diario, Lottery) queda "Próximamente", mismo criterio
     que usó /controles cuando arrancó sin ningún módulo.
     """
+    if not MOSTRAR_REPORTES:
+        return redirect(url_for("home"))
     today = date.today()
     return render_template(
         "carga_datos_reportes.html",
@@ -1954,6 +1964,7 @@ def reportes_proyecciones():
         "reportes_proyecciones.html",
         projection=projection,
         net=proyecciones_neta.build_net(year, month, projection),
+        formulas=proyecciones.formulas(projection),
         accent="#7A6BB0",
         accent_soft="#F1EFF8",
         **_month_nav(year, month),
@@ -8153,6 +8164,8 @@ def controles_cierre():
     entries = control_cierre.build_month_entries(_build_store_info_rows(year, month), year, month)
     monthly_report, cross = _monthly_cross(year, month, entries)
     jh_cards, kia_not_in_cards = _cierre_checks(year, month, entries)
+    # Después de los cruces: esos comparan lo cargado, sin el renglón reclasificado a mano.
+    control_cierre.apply_difference_record(entries)
     section = next(s for s in CONTROLES_SECTIONS if s["key"] == "control_cierre")
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
     next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
@@ -8173,6 +8186,7 @@ def controles_cierre():
         account_sale_tax=control_cierre.ACCOUNT_SALE_TAX,
         sale_tax_record=control_cierre.sale_tax_record(year, month),
         kia_not_in_cards=kia_not_in_cards,
+        difference_explained=control_cierre.difference_explained(entries),
         year=year,
         month=month,
         month_name=_MONTH_NAMES_ES[month - 1],
@@ -8194,6 +8208,29 @@ def controles_cierre_sale_tax():
     return redirect(url_for("controles_cierre", year=year, month=month) + "#ci-sale-tax")
 
 
+@app.route("/controles/cierre/diferencia", methods=["POST"])
+def controles_cierre_diferencia():
+    """
+    Marca o reclasifica la diferencia del asiento del mes (pedido del usuario,
+    2026-11-24; control_cierre.set_difference_record). "borrar" la saca.
+    """
+    year, month = _cierre_month()
+    form = request.form
+    try:
+        if form.get("accion") == "borrar":
+            control_cierre.set_difference_record(year, month)
+        else:
+            try:
+                amount = _parse_money_field((form.get("importe") or "").replace("−", "-"))
+            except ValueError:
+                raise ValueError("El importe no es un número válido.")
+            control_cierre.set_difference_record(year, month, form.get("tipo"), amount,
+                                                 form.get("cuenta", ""), form.get("nota", ""))
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("controles_cierre", year=year, month=month) + "#ci-diferencia")
+
+
 @app.route("/controles/cierre/exportar/pdf")
 def controles_cierre_pdf():
     """
@@ -8207,10 +8244,12 @@ def controles_cierre_pdf():
         flash("No hay ningún Store Info guardado ese mes: no hay asientos para exportar.", "error")
         return redirect(url_for("controles_cierre", year=year, month=month))
     jh_cards, kia_not_in_cards = _cierre_checks(year, month, entries)
+    cross = _monthly_cross(year, month, entries)[1]
+    control_cierre.apply_difference_record(entries)
     dest_path = os.path.join(tempfile.mkdtemp(prefix="cierre_pdf_"), f"Control Cierre {month:02d}-{year}.pdf")
     control_cierre.build_entries_pdf(
         entries, f"Control Cierre — {_MONTH_NAMES_ES[month - 1]} {year}", _cierre_period_label(entries), dest_path,
-        cross=_monthly_cross(year, month, entries)[1],
+        cross=cross,
         jh_cards=jh_cards, kia_not_in_cards=kia_not_in_cards,
         sale_tax_record=control_cierre.sale_tax_record(year, month),
         sale_tax_due=month_end_warnings_due(year, month),
@@ -8660,7 +8699,8 @@ def controles_asientos():
     """
     year, month = _cierre_month()
     first, last, _previous = _month_bounds(year, month)
-    entries = control_cierre.build_month_entries(_build_store_info_rows(year, month), year, month)
+    entries = control_cierre.apply_difference_record(
+        control_cierre.build_month_entries(_build_store_info_rows(year, month), year, month))
     _ledger, account, _settings = _gettel_account()
     expected = control_asientos.cierre_entries(entries)
     expected[2:2] = control_asientos.gettel_entries(cuenta_kia_toyota.account_month(account, year, month))

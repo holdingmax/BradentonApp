@@ -274,6 +274,40 @@
   </div>
   {% endif %}
   <script>
+    // Reemplaza la página por `html` sin recargar (guardar sin recargar y las
+    // cargas con barra de progreso). document.write deja la hoja de estilos
+    // cargando aparte: sin esto el navegador pintaba la página nueva un
+    // instante sin formato y el scroll se restauraba sobre esa versión
+    // (pedido del usuario, 2026-11-24: "cuando marco como registrado el
+    // asiento de DEV SALE TAX la pantalla se pone rara"). La página nueva
+    // queda oculta, con el fondo de siempre, hasta que cargan sus estilos;
+    // recién ahí corre `then` (el scroll y los avisos).
+    window.__writePage = function (html, then) {
+      html = String(html).replace(/<head([^>]*)>/i,
+        '<head$1><style id="swap-hold">html{background:#F2F6F9}body{visibility:hidden}</style>');
+      document.open();
+      document.write(html);
+      document.close();
+      var shown = false;
+      function reveal() {
+        if (shown) return;
+        shown = true;
+        var hold = document.getElementById('swap-hold');
+        if (hold) hold.remove();
+        if (then) then();
+      }
+      var pending = Array.prototype.filter.call(document.querySelectorAll('link[rel="stylesheet"]'),
+        function (link) { return !link.sheet; });
+      if (!pending.length) { reveal(); return; }
+      var left = pending.length;
+      pending.forEach(function (link) {
+        function done() { if (--left <= 0) reveal(); }
+        link.addEventListener('load', done);
+        link.addEventListener('error', done);
+      });
+      setTimeout(reveal, 4000);  // si un archivo no responde, igual se muestra
+    };
+
     // Barra lateral global (.app-rail) -- "fijada abierta" dura solo
     // mientras dure esta vista de página (nunca persiste entre navegaciones
     // ni sobrevive un F5) -- pedido explícito del usuario 2026-09-11: si se
@@ -1381,9 +1415,7 @@
             if (xhr.responseURL && xhr.responseURL !== window.location.href) {
               try { window.history.replaceState(null, '', xhr.responseURL); } catch (histErr) {}
             }
-            document.open();
-            document.write(xhr.responseText);
-            document.close();
+            window.__writePage(xhr.responseText);
           };
 
           xhr.send(new FormData(form));
@@ -1516,10 +1548,10 @@
         // document.write en una sola tarea: el navegador no pinta nada entre
         // la página vieja y la nueva (no hay pantalla en blanco), y los
         // scripts de la página nueva corren como en una carga normal.
-        document.open();
-        document.write(html);
-        document.close();
+        window.__writePage(html, function () { afterSwap(finalUrl, samePage, state, ok); });
+      }
 
+      function afterSwap(finalUrl, samePage, state, ok) {
         var notices = [];
         document.querySelectorAll('[data-flash]').forEach(function (el) {
           var kind = el.getAttribute('data-flash');
@@ -2201,6 +2233,49 @@
       document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') closeAll();
       });
+    })();
+
+    // Cómo se calculó un dato (data-formula): un cartel al pasar el cursor
+    // (pedido del usuario, 2026-11-24). Va aparte del click, que sigue
+    // abriendo el desglose donde lo hay.
+    (function () {
+      let tip = null, current = null;
+      function place(target) {
+        const r = target.getBoundingClientRect();
+        const w = tip.offsetWidth, h = tip.offsetHeight;
+        let left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+        let top = r.top - h - 8;
+        if (top < 8) top = r.bottom + 8;
+        tip.style.left = left + 'px';
+        tip.style.top = top + 'px';
+      }
+      function show(target) {
+        if (!tip) {
+          tip = document.createElement('div');
+          tip.className = 'formula-tip';
+          tip.setAttribute('role', 'tooltip');
+          document.body.appendChild(tip);
+        }
+        current = target;
+        tip.textContent = '';
+        const title = document.createElement('span');
+        title.className = 'formula-tip-title';
+        title.textContent = target.getAttribute('data-formula-title') || 'Cómo se calcula';
+        tip.appendChild(title);
+        tip.appendChild(document.createTextNode(target.getAttribute('data-formula')));
+        place(target);
+        tip.classList.add('show');
+      }
+      function hide() {
+        current = null;
+        if (tip) tip.classList.remove('show');
+      }
+      document.addEventListener('mouseover', function (event) {
+        const target = event.target.closest && event.target.closest('[data-formula]');
+        if (target && target !== current && target.getAttribute('data-formula')) show(target);
+        else if (!target && current) hide();
+      });
+      document.addEventListener('scroll', hide, true);
     })();
   </script>
 </body>

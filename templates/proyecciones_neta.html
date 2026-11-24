@@ -63,20 +63,22 @@
   </div>
 </div>
 
+{# El cartel con la cuenta al pasar el cursor (data-formula, ver base.html). #}
+{% macro fx(obj, field) %}{% if obj and obj.formula and obj.formula[field] %} data-formula="{{ obj.formula[field] }}"{% endif %}{% endmacro %}
 <div class="neta-kpi-grid">
   <div class="neta-kpi">
     <div class="neta-kpi-label">Utilidad bruta proyectada</div>
-    <div class="neta-kpi-value">{{ money(n.gross.proj, 0) }}</div>
+    <div class="neta-kpi-value"><span{{ fx(n.gross, "proj") }}>{{ money(n.gross.proj, 0) }}</span></div>
     <div class="neta-kpi-sub">hasta hoy {{ money(n.gross.actual, 0) }}{% if n.has_bce %} · Bce {{ money(n.gross.bce, 0) }}{% endif %}</div>
   </div>
   <div class="neta-kpi">
     <div class="neta-kpi-label">Gastos proyectados</div>
-    <div class="neta-kpi-value">{{ neg(n.expenses.proj, 0) }}</div>
+    <div class="neta-kpi-value"><span{{ fx(n.expenses, "proj") }}>{{ neg(n.expenses.proj, 0) }}</span></div>
     <div class="neta-kpi-sub">hasta hoy {{ neg(n.expenses.actual, 0) }}{% if n.has_bce %} · Bce {{ neg(n.expenses.bce, 0) }}{% endif %}</div>
   </div>
   <div class="neta-kpi neta-kpi-hero">
     <div class="neta-kpi-label">Utilidad neta proyectada</div>
-    <div class="neta-kpi-value">{{ money(n.net.proj, 0) }}</div>
+    <div class="neta-kpi-value"><span{{ fx(n.net, "proj") }}>{{ money(n.net.proj, 0) }}</span></div>
     <div class="neta-kpi-sub">hasta hoy {{ money(n.net.actual, 0) }}{% if n.has_bce %} · Bce {{ money(n.net.bce, 0) }}{% endif %}</div>
   </div>
 </div>
@@ -100,24 +102,24 @@
         <tr class="neta-group">
           <td>{% if g.key == "cstore" %}<a href="{{ url_for('reportes_proyecciones', year=year, month=month) }}#proy-cstore">{{ g.title }}</a>{% else %}{{ g.title }}{% endif %}</td>
           <td class="neta-col-src"></td>
-          <td>{{ money(g.actual) }}</td>
-          <td class="neta-proj">{{ money(g.proj) }}</td>
+          <td><span{{ fx(g, "actual") }}>{{ money(g.actual) }}</span></td>
+          <td class="neta-proj"><span{{ fx(g, "proj") }}>{{ money(g.proj) }}</span></td>
           {% if n.has_bce %}<td>{{ money(g.bce) }}</td>{% endif %}
         </tr>
         {% for ln in g.lines %}
         <tr class="neta-line">
           <td>{{ ln.label }}</td>
           <td class="neta-col-src">{{ ln.source }}</td>
-          <td>{{ money(ln.actual) }}</td>
-          <td class="neta-proj">{{ money(ln.proj) }}</td>
+          <td><span{{ fx(ln, "actual") }}>{{ money(ln.actual) }}</span></td>
+          <td class="neta-proj"><span{{ fx(ln, "proj") }}>{{ money(ln.proj) }}</span></td>
           {% if n.has_bce %}<td></td>{% endif %}
         </tr>
         {% endfor %}
         {% endfor %}
         <tr class="neta-total">
           <td>Utilidad bruta</td><td class="neta-col-src"></td>
-          <td>{{ money(n.gross.actual) }}</td>
-          <td class="neta-proj">{{ money(n.gross.proj) }}</td>
+          <td><span{{ fx(n.gross, "actual") }}>{{ money(n.gross.actual) }}</span></td>
+          <td class="neta-proj"><span{{ fx(n.gross, "proj") }}>{{ money(n.gross.proj) }}</span></td>
           {% if n.has_bce %}<td>{{ money(n.gross.bce) }}</td>{% endif %}
         </tr>
 
@@ -126,22 +128,22 @@
         <tr class="neta-line">
           <td>{{ ln.label }}</td>
           <td class="neta-col-src">{{ ln.source }}</td>
-          <td>{{ neg(ln.actual) }}</td>
-          <td class="neta-proj">{{ neg(ln.proj) }}</td>
+          <td><span{{ fx(ln, "actual") }}>{{ neg(ln.actual) }}</span></td>
+          <td class="neta-proj"><span{{ fx(ln, "proj") }}>{{ neg(ln.proj) }}</span></td>
           {% if n.has_bce %}<td>{{ neg(ln.bce) }}</td>{% endif %}
         </tr>
         {% endfor %}
         <tr class="neta-total">
           <td>Total de gastos</td><td class="neta-col-src"></td>
-          <td>{{ neg(n.expenses.actual) }}</td>
-          <td class="neta-proj">{{ neg(n.expenses.proj) }}</td>
+          <td><span{{ fx(n.expenses, "actual") }}>{{ neg(n.expenses.actual) }}</span></td>
+          <td class="neta-proj"><span{{ fx(n.expenses, "proj") }}>{{ neg(n.expenses.proj) }}</span></td>
           {% if n.has_bce %}<td>{{ neg(n.expenses.bce) }}</td>{% endif %}
         </tr>
 
         <tr class="neta-net">
           <td>Utilidad neta</td><td class="neta-col-src"></td>
-          <td>{{ money(n.net.actual) }}</td>
-          <td>{{ money(n.net.proj) }}</td>
+          <td><span{{ fx(n.net, "actual") }}>{{ money(n.net.actual) }}</span></td>
+          <td><span{{ fx(n.net, "proj") }}>{{ money(n.net.proj) }}</span></td>
           {% if n.has_bce %}<td>{{ money(n.net.bce) }}</td>{% endif %}
         </tr>
       </tbody>

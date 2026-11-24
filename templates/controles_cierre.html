@@ -54,8 +54,18 @@
   .ci-st-table th { background: var(--accent-soft); font-size: 12px; font-weight: 700; text-align: left; padding: 7px 12px; border: 1px solid var(--border); }
   .ci-st-table td { padding: 7px 12px; border: 1px solid var(--border); font-variant-numeric: tabular-nums; }
   .ci-st-table .num { text-align: right; white-space: nowrap; }
-  .ci-st-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-  .ci-st-form input[type=text] { width: 140px; }
+  .ci-st-form { margin-top: 14px; }
+  /* Diferencia marcada o reclasificada a mano (pedido del usuario, 2026-11-24). */
+  .ci-diff-box { margin-top: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  .ci-diff-box h3 { margin: 0 0 4px; font-size: 14px; }
+  .ci-diff-box > p { margin: 0 0 10px; font-size: 12.5px; color: var(--text-soft); }
+  .ci-diff-form .ci-diff-account { width: 230px; }
+  .ci-diff-form .ci-diff-amount { width: 120px; }
+  .ci-diff-form .ci-diff-note { width: 240px; }
+  .ci-diff-done { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+  .ci-diff-done form { margin: 0; }
+  .ci-adjusted td.ci-account::after { content: "reclasificado"; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-style: normal; font-weight: 600; background: var(--accent-soft); color: var(--accent); }
+  .ci-st-form.action-row input[type=text] { width: 190px; }
   /* Centrados en pantallas anchas (pedido del usuario, 2026-10-09: quedaban pegados a la izquierda). */
   .ci-entries, .ci-sale-tax, .ci-cross { margin-left: auto; margin-right: auto; }
   .totals-breakdown-popover { min-width: 260px; }
@@ -101,18 +111,53 @@
 
   {% if entries %}
   {% set balanced = entries.difference|abs < 0.005 %}
-  <div class="ci-status {{ 'ok' if balanced and not notice and not kia_not_in_cards else 'bad' }}">
+  {% set adj = entries.adjustment %}
+  <div class="ci-status {{ 'ok' if (balanced or difference_explained) and not notice and not kia_not_in_cards else 'bad' }}">
     <div class="ci-status-title">
-      {% if not balanced %}El asiento no cierra: Debe y Haber difieren en {{ money(entries.difference) }}.
+      {% if not balanced and not difference_explained %}El asiento no cierra: Debe y Haber difieren en {{ money(entries.difference) }}.
       {% elif notice %}El asiento cierra, pero faltan datos.
       {% elif kia_not_in_cards %}El asiento cierra, pero hay un pago de Kia/Toyota para revisar.
+      {% elif difference_explained %}Diferencia revisada: Debe y Haber difieren en {{ money(entries.difference) }}, explicado abajo.
+      {% elif adj and adj.kind == 'reclasificar' %}Bien: el asiento cierra con la diferencia reclasificada.
       {% else %}Bien: el asiento cierra y no falta ningún dato.{% endif %}
     </div>
     <p>{{ period_label }}{% if not entries.complete_month %} (el mes todavía no está completo){% endif %}.</p>
-    {% if not balanced %}<p>La diferencia no depende de LOTTO ni de VS: es Total Revenue contra Total Ventas de Store Info. Buscá el día que no cierra en Store Info (un importe de tarjeta mal cargado, por ejemplo).</p>{% endif %}
+    {% if not balanced and not difference_explained %}<p>La diferencia no depende de LOTTO ni de VS: es Total Revenue contra Total Ventas de Store Info. Buscá el día que no cierra en Store Info (un importe de tarjeta mal cargado, por ejemplo).</p>{% endif %}
     {% if notice %}<p>{{ notice }} Se completa subiendo esos Reporte Diario. Los importes que quedan cortos llevan un <span class="ci-short">*</span>.</p>{% endif %}
+    {% if adj and adj.stale %}<p class="ci-bad">La diferencia se había marcado con {{ money(adj.amount) }} y ahora es {{ money(adj.difference) }}: cambió algún día del mes. Revisala y volvé a marcarla.</p>{% endif %}
     {% if kia_not_in_cards %}<p class="ci-bad">Pago de Kia/Toyota que no aparece en tarjetas: {% for k in kia_not_in_cards %}{{ fmt_ddmm(k.date) }} (LOCAL ACCT {{ money(k.kia) }}, tarjetas del día {{ money(k.sale) }}){{ ', ' if not loop.last else '.' }}{% endfor %} {{ account_jh }} (Tarjetas − VS) queda corto ese día: revisá si se cobró de otra forma o si el LOCAL ACCT está mal cargado.</p>{% endif %}
   </div>
+
+  {# Marcar o reclasificar la diferencia (pedido del usuario, 2026-11-24: "como en el caso de octubre"). #}
+  {% if adj and not adj.stale %}
+  <div class="ci-diff-box" id="ci-diferencia">
+    <div class="ci-diff-done">
+      <span>
+        <strong>Diferencia de {{ money(adj.amount) }} {{ 'reclasificada a ' ~ adj.account if adj.kind == 'reclasificar' else 'marcada como revisada' }}</strong>{% if adj.note %}: {{ adj.note }}{% endif %}.
+        <span class="muted">Marcado el {{ adj.marked_at[8:10] }}/{{ adj.marked_at[5:7] }}.</span>
+      </span>
+      <form method="post" action="{{ url_for('controles_cierre_diferencia', year=year, month=month) }}" class="action-row">
+        <input type="hidden" name="accion" value="borrar">
+        <button type="submit" class="btn-secondary">Deshacer</button>
+      </form>
+    </div>
+  </div>
+  {% elif not balanced %}
+  <div class="ci-diff-box" id="ci-diferencia">
+    <h3>Resolver la diferencia</h3>
+    <p>Si ya sabés de dónde viene (un prepago, un ajuste), reclasificala a la cuenta que corresponde y el asiento suma ese renglón, o marcala como revisada con una nota. Si después cambia algún día del mes, la marca deja de valer.</p>
+    <form method="post" action="{{ url_for('controles_cierre_diferencia', year=year, month=month) }}" class="action-row ci-diff-form">
+      <select name="tipo" aria-label="Qué hacer con la diferencia">
+        <option value="reclasificar">Reclasificar a una cuenta</option>
+        <option value="revisada">Marcar como revisada</option>
+      </select>
+      <input type="text" name="importe" class="ci-diff-amount" value="{{ '%.2f'|format(entries.difference) }}" aria-label="Importe">
+      <input type="text" name="cuenta" class="ci-diff-account" placeholder="Cuenta de Ratio (para reclasificar)" aria-label="Cuenta">
+      <input type="text" name="nota" class="ci-diff-note" placeholder="Nota (ej. prepago del 04/10)" aria-label="Nota">
+      <button type="submit" class="btn-accent">Guardar</button>
+    </form>
+  </div>
+  {% endif %}
 
   <div class="ci-entries">
     <div>
@@ -121,7 +166,7 @@
         <thead><tr><th colspan="2"></th><th>Debe</th><th>Haber</th></tr></thead>
         <tbody>
           {% for line in entries.lines %}
-          <tr class="ci-box {{ 'ci-red' if line.red }}">
+          <tr class="ci-box {{ 'ci-red' if line.red }}{{ ' ci-adjusted' if line.adjusted }}">
             {% if line.side == 'debit' %}
             <td colspan="2" class="ci-account">{{ line.account }}
               </td>
@@ -195,7 +240,7 @@
         <tr><td>{{ fmt_ddmm(st.date) }}/{{ st.date[:4] }}</td><td>{{ account_sale_tax }}</td><td class="num">{{ money(0) }}</td><td class="num">{{ money(st.amount) }}</td></tr>
       </tbody>
     </table>
-    <form method="post" action="{{ url_for('controles_cierre_sale_tax', year=year, month=month) }}" class="ci-st-form">
+    <form method="post" action="{{ url_for('controles_cierre_sale_tax', year=year, month=month) }}" class="ci-st-form action-row">
       {% if sale_tax_record %}
       <input type="hidden" name="registered" value="0">
       <span class="muted">Marcado el {{ sale_tax_record.marked_at[8:10] }}/{{ sale_tax_record.marked_at[5:7] }}.</span>

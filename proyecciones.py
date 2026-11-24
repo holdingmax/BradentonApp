@@ -292,6 +292,156 @@ def gross_split(result):
     }
 
 
+def _money(value, decimals=2):
+    """$1,234.56 (−$1,234.56 en negativo), para los textos de las fórmulas."""
+    if value is None:
+        return "—"
+    return ("−$" if value < 0 else "$") + f"{abs(value):,.{decimals}f}"
+
+
+def _gal(value):
+    return "—" if value is None else f"{value:,.2f} gal"
+
+
+def _pct(value):
+    return "—" if value is None else f"{value * 100:.2f} %"
+
+
+def formulas(p):
+    """
+    Cómo sale cada número del Panel de proyecciones, en palabras y con los
+    valores (pedido del usuario, 2026-11-24): la página los muestra en un
+    cartel al pasar el cursor (data-formula). Las claves son las que usa
+    reportes_proyecciones.html.
+    """
+    n, d = p["days_loaded"], p["days_in_month"]
+    days = f"{n} día{'' if n == 1 else 's'} cargado{'' if n == 1 else 's'}"
+
+    def pace(label, actual, proj, unit=_money):
+        if actual is None or proj is None:
+            return None
+        if n >= d:
+            return f"{label}: el mes completo, {unit(proj)}"
+        return f"{label} hasta hoy {unit(actual)} ÷ {days} × {d} días del mes = {unit(proj)}"
+
+    fuel, fuel_proj, ppp = p["fuel"], p["fuel_proj"], p["ppp"]
+
+    def fuel_util(block):
+        if block["utilidad"] is None:
+            return "Sin PPP no se puede calcular: falta el inventario inicial o las facturas del mes en Físico."
+        return (f"Venta {_money(block['sales'])} − costo ({_gal(block['gallons'])} × PPP {_money(ppp, 4)} = "
+                f"{_money(block['cost'])}) = {_money(block['utilidad'])}")
+
+    initial = p.get("fuel_initial") or {}
+    invoices = fisico_db.get_month_invoices(p["year"], p["month"])
+    inv_gal = sum(inv.get("gallons") or 0.0 for inv in invoices)
+    inv_amount = sum(inv.get("amount") or 0.0 for inv in invoices)
+    if ppp is None:
+        ppp_text = "Sin PPP: falta el inventario inicial o las facturas del mes en Físico."
+    else:
+        ppp_text = (f"(inventario inicial {_money(initial.get('amount'))} + {len(invoices)} factura{'' if len(invoices) == 1 else 's'} de J.H. {_money(inv_amount)})"
+                    f"\n÷ ({_gal(initial.get('gallons'))} iniciales + {_gal(inv_gal)} comprados)\n= {_money(ppp, 4)} por galón")
+
+    out = {
+        "fuel_gallons": f"Galones de los {days} del Close Store (Store Info)",
+        "fuel_gallons_proj": pace("Galones", fuel["gallons"], fuel_proj["gallons"], _gal),
+        "fuel_sales": f"Sales Fuel + Desc. Comb de los {days} del Close Store",
+        "fuel_sales_proj": pace("Venta", fuel["sales"], fuel_proj["sales"]),
+        "fuel_util": fuel_util(fuel),
+        "fuel_util_proj": fuel_util(fuel_proj),
+        "fuel_price": (f"Venta {_money(fuel['sales'])} ÷ {_gal(fuel['gallons'])} = {_money(fuel['price'], 4)}"
+                       if fuel["price"] is not None else None),
+        "ppp": ppp_text,
+        "fuel_margin_gal": (f"Precio de venta {_money(fuel['price'], 4)} − PPP {_money(ppp, 4)} = {_money(fuel['margin_gal'], 4)}"
+                            if fuel["margin_gal"] is not None else None),
+        "rubros": {},
+    }
+
+    cstore = p["cstore"]
+    lot = p.get("lottery") or {}
+    for r in cstore["rubros"]:
+        if r.get("lottery"):
+            if lot.get("estimated"):
+                util_proj = "Sin comisiones cargadas: la venta de LOTTO proyectada × el % teórico"
+            elif lot.get("days_loaded", 0) < lot.get("days_total", 0):
+                util_proj = (f"Comisiones {_money(lot['comm'])} ÷ {lot['days_loaded']} días con comisión"
+                             f" × {lot['days_total']} días de las semanas del mes = {_money(lot['comm_proj'])}")
+            else:
+                util_proj = f"Todas las semanas del mes cargadas: {_money(lot.get('comm_proj'))}"
+            util = "Comisión real On-Line + Skoff de las semanas que se pagan a Chase en el mes"
+            margin = (f"Comisión {_money(lot.get('comm'))} ÷ lo vendido {_money(lot.get('sales'))} = {_pct(r['margin'])}"
+                      if r["margin"] is not None else None)
+        else:
+            util = f"Vendido {_money(r['amount'])} × {_pct(r['margin'])} teórico = {_money(r['utilidad'])}"
+            util_proj = (f"Proyectado {_money(r['proj'])} × {_pct(r['margin'])} teórico = {_money(r['utilidad_proj'])}"
+                         if r["proj"] is not None else None)
+            margin = "El % teórico del rubro (lo cambia el admin acá mismo)"
+        out["rubros"][r["label"]] = {
+            "amount": f"{r['display']}: suma de los {days} del Close Store (Ventas por Departamento)",
+            "margin": margin,
+            "utilidad": util,
+            "proj": pace("Vendido", r["amount"], r["proj"]),
+            "utilidad_proj": util_proj,
+        }
+
+    balance = [r for r in cstore["rubros"] if r["in_balance"]]
+    names = ", ".join(r["display"] for r in balance)
+
+    def sum_text(field, rows):
+        values = [r[field] for r in rows]
+        if any(v is None for v in values):
+            return None
+        return " + ".join(f"{r['display']} {_money(r[field])}" for r in rows) + f" = {_money(sum(values))}"
+
+    cs, cwl = cstore["balance"], cstore["with_lottery"]
+    lotto = next(r for r in cstore["rubros"] if r.get("lottery"))
+    out["cstore"] = {
+        "amount": sum_text("amount", balance),
+        "proj": pace(f"Venta ({names})", cs["amount"], cs["proj"]),
+        "utilidad": sum_text("utilidad", balance),
+        "utilidad_proj": sum_text("utilidad_proj", balance),
+        "margin": f"Utilidad {_money(cs['utilidad'])} ÷ venta {_money(cs['amount'])} = {_pct(cs['margin'])}"
+                  if cs["margin"] is not None else None,
+    }
+    out["cstore_lottery"] = {
+        "amount": f"C-Store {_money(cs['amount'])} + LOTTO {_money(lotto['amount'])} = {_money(cwl['amount'])}",
+        "proj": f"C-Store {_money(cs['proj'])} + LOTTO {_money(lotto['proj'])} = {_money(cwl['proj'])}",
+        "utilidad": f"Utilidad de los rubros {_money(cs['utilidad'])} + comisión Lottery {_money(lot.get('comm'))} = {_money(cwl['utilidad'])}",
+        "utilidad_proj": (f"Utilidad de los rubros {_money(cs['utilidad_proj'])} + comisión Lottery "
+                          f"{_money(lot.get('comm_proj'))} = {_money(cwl['utilidad_proj'])}"),
+        "margin": f"Utilidad {_money(cwl['utilidad'])} ÷ venta {_money(cwl['amount'])} = {_pct(cwl['margin'])}"
+                  if cwl["margin"] is not None else None,
+    }
+
+    def both(a, b):
+        return (a + b) if (a is not None and b is not None) else None
+
+    out["util_now"] = (f"Combustible {_money(fuel['utilidad'])} + C-Store con Lottery {_money(cwl['utilidad'])}"
+                       f" = {_money(both(fuel['utilidad'], cwl['utilidad']))}")
+    out["util_proj"] = (f"Combustible {_money(fuel_proj['utilidad'])} + C-Store con Lottery {_money(cwl['utilidad_proj'])}"
+                        f" = {_money(both(fuel_proj['utilidad'], cwl['utilidad_proj']))}")
+
+    split = p.get("split")
+    if split:
+        total = split["total"]
+        out["split_total"] = (f"Combustible {_money(split['fuel']['value'])} + C-Store {_money(split['cstore']['value'])}"
+                              f" = {_money(total)}")
+        out["split_fuel"] = fuel_util(fuel_proj)
+        out["split_fuel_pct"] = f"{_money(split['fuel']['value'])} ÷ {_money(total)} = {_pct(split['fuel']['pct_total'])}"
+        out["split_cstore"] = (" + ".join(f"{part['label']} {_money(part['value'])}" for part in split["cstore"]["parts"])
+                               + f" = {_money(split['cstore']['value'])}")
+        out["split_cstore_pct"] = (f"{_money(split['cstore']['value'])} ÷ {_money(total)} = "
+                                   f"{_pct(split['cstore']['pct_total'])}")
+        out["split_parts"] = {}
+        for part in split["cstore"]["parts"]:
+            rubro = out["rubros"].get(part["key"], {})
+            out["split_parts"][part["key"]] = {
+                "value": rubro.get("utilidad_proj"),
+                "pct": f"{_money(part['value'])} ÷ C-Store {_money(split['cstore']['value'])} = {_pct(part['pct_cstore'])}",
+            }
+    return out
+
+
 def _chart_data(year, month, result):
     """
     Lo que usan los gráficos de la página: la utilidad bruta proyectada por

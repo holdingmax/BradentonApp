@@ -74,7 +74,7 @@
     <a href="{{ url_for('controles_cmv', year=next_year, month=next_month) }}" class="btn-secondary historial-nav-btn">Mes siguiente &rarr;</a>
   </div>
 
-  <form method="post" action="{{ url_for('controles_cmv_subir') }}" enctype="multipart/form-data" class="cv-upload">
+  <form method="post" action="{{ url_for('controles_cmv_subir') }}" enctype="multipart/form-data" class="cv-upload action-row">
     <input type="file" name="files" accept=".xls,.html,.htm" multiple required>
     <button type="submit" class="btn-accent">Subir reporte de Elistar</button>
   </form>

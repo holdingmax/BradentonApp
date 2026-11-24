@@ -61,7 +61,9 @@ def cierre_entries(entries):
     if not entries:
         return []
     titles = entries["titles"]
-    sales = [_line(_CIERRE_ACCOUNTS[l["account"]], l["side"], l["amount"], l["account"]) for l in entries["lines"]]
+    # Un renglón reclasificado a mano (control_cierre.apply_difference_record) va con su código, si lo tiene.
+    sales = [_line(_CIERRE_ACCOUNTS.get(l["account"]) or l.get("code") or l["account"], l["side"], l["amount"], l["account"])
+             for l in entries["lines"]]
     collected, tax = entries["collected"], entries["sale_tax"]["amount"]
     return [
         _entry(titles["sales"], "Cierre", sales, ("LIQUIDACION", "RECAUDACION"), ("COMISIONES", "LOTTERY")),

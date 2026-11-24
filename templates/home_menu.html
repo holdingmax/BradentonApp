@@ -58,6 +58,8 @@
       <span class="home-menu-card-desc">Subí los archivos del mes.</span>
       <span class="home-menu-card-cta">Entrar →</span>
     </a>
+    {# Reportes, escondido hasta que se perfeccione (pedido del usuario, 2026-11-24; webapp.MOSTRAR_REPORTES). #}
+    {% if mostrar_reportes %}
     <a class="home-menu-card" href="{{ url_for('carga_datos_reportes') }}" style="--card-color: #7A6BB0; --card-color-soft: #F1EFF8;">
       <span class="home-menu-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -66,6 +68,7 @@
       <span class="home-menu-card-desc">Resúmenes del mes para descargar.</span>
       <span class="home-menu-card-cta">Entrar →</span>
     </a>
+    {% endif %}
     <!-- "Controles" reemplaza a "Documentos" -- pedido explícito del usuario
          (2026-09-28): controles del mes completo con los datos ya cargados.
          Documentos solo vuelve si se reactiva el guardado de archivos

@@ -159,7 +159,7 @@
 <div class="page-header">
   <span class="eyebrow">BradentonApp</span>
   <h1>Manual de Usuario</h1>
-  <p class="page-subtitle">La página en tres partes (Carga de Datos, Reportes y Controles), más el Panel de proyecciones. En cada captura, los números rojos son los pasos.</p>
+  <p class="page-subtitle">La página en {% if mostrar_reportes %}tres partes (Carga de Datos, Reportes y Controles){% else %}dos partes (Carga de Datos y Controles){% endif %}, más el Panel de proyecciones. En cada captura, los números rojos son los pasos.</p>
 </div>
 
 <div class="manual-shell">
@@ -192,6 +192,7 @@
         <li><a href="#ratio" data-target="ratio"><span class="manual-toc-dot"></span>Ratio (Mayores)</a></li>
       </ul>
     </div>
+    {% if mostrar_reportes %}
     <div>
       <button type="button" class="manual-toc-toggle" aria-expanded="true">
         <span class="manual-toc-label">2 · Reportes</span>
@@ -201,9 +202,10 @@
         <li><a href="#reportes" data-target="reportes"><span class="manual-toc-dot"></span>Bajar un reporte</a></li>
       </ul>
     </div>
+    {% endif %}
     <div>
       <button type="button" class="manual-toc-toggle" aria-expanded="true">
-        <span class="manual-toc-label">3 · Controles</span>
+        <span class="manual-toc-label">{{ '3' if mostrar_reportes else '2' }} · Controles</span>
         <svg class="manual-toc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <ul class="manual-toc-list">
@@ -237,13 +239,13 @@
     <section class="manual-intro" id="inicio">
       <h2>Cómo se usa la página</h2>
       <h3 class="manual-intro-subhead">El menú</h3>
-      {{ shot('menu', 'Menú con las tres tarjetas') }}
+      {{ shot('menu', 'Menú') }}
       <ol class="manual-steps">
         <li><span class="n">1</span><p><b>Carga de Datos</b>: subís los archivos (PDF, Excel, fotos). La página los lee y los guarda.</p></li>
-        <li><span class="n">2</span><p><b>Reportes</b>: bajás el resumen de un mes en PDF.</p></li>
-        <li><span class="n">3</span><p><b>Controles</b>: revisás que el mes cierre con lo ya cargado.</p></li>
-        <li><span class="n">4</span><p><b>Panel de proyecciones</b>: cómo cerraría el mes al ritmo de lo vendido. Está arriba en todas las páginas.</p></li>
+        <li><span class="n">2</span><p><b>Controles</b>: revisás que el mes cierre con lo ya cargado.</p></li>
+        <li><span class="n">3</span><p><b>Panel de proyecciones</b>: cómo cerraría el mes al ritmo de lo vendido. Está arriba en todas las páginas.</p></li>
       </ol>
+      <div class="manual-tip"><b>Tené en cuenta:</b> la sección <b>Reportes</b> está escondida por ahora, hasta que se termine de ajustar.</div>
 
       <h3 class="manual-intro-subhead">La barra lateral</h3>
       {{ shot('barra-lateral', 'Barra lateral abierta en EFT y Cupones') }}
@@ -558,7 +560,8 @@
       </div>
     </section>
 
-    <!-- ================= 2. REPORTES ================= -->
+    <!-- ================= 2. REPORTES (escondido: webapp.MOSTRAR_REPORTES) ================= -->
+    {% if mostrar_reportes %}
     <div class="manual-section-heading">
       <span class="manual-part">Parte 2</span>
       <h2>Reportes</h2>
@@ -585,10 +588,11 @@
       </table>
       <div class="manual-tip"><b>Tené en cuenta:</b> si el mes no tiene datos, avisa en vez de bajar un PDF vacío.</div>
     </section>
+    {% endif %}
 
     <!-- ================= 3. CONTROLES ================= -->
     <div class="manual-section-heading">
-      <span class="manual-part">Parte 3</span>
+      <span class="manual-part">Parte {{ '3' if mostrar_reportes else '2' }}</span>
       <h2>Controles</h2>
       <p>Comparan lo cargado para saber si el mes cierra. Acá casi no se carga nada: solo Elistar en Control CMV, y las fotos y el inventario en Combustible. Los mayores de Ratio se suben en Carga de Datos.</p>
     </div>
@@ -616,7 +620,12 @@
         <li><span class="n">4</span><p>A fin de mes: el asiento del Sale Tax para pasar al sistema contable.</p></li>
         <li><span class="n">5</span><p>Pasado el asiento, <b>Marcar como registrado</b> (el N° es opcional).</p></li>
       </ol>
-      <div class="manual-tip"><b>Tené en cuenta:</b> más abajo están el cruce de las tarjetas con J.H. y el cruce con el reporte mensual. <b>Exportar</b>, al final: el control entero en PDF, o en Excel.</div>
+      {{ shot('cierre-diferencia', 'Resolver la diferencia del asiento') }}
+      <ol class="manual-steps" start="6">
+        <li><span class="n">6</span><p>Si el asiento no cierra y ya sabés por qué (un prepago, un ajuste): <b>Reclasificar a una cuenta</b> y escribí la cuenta de Ratio, o <b>Marcar como revisada</b> con una nota. El importe viene con la diferencia.</p></li>
+        <li><span class="n">7</span><p><b>Guardar</b>. Reclasificada, el asiento suma ese renglón y cierra; revisada, queda igual pero en verde. <b>Deshacer</b> la saca.</p></li>
+      </ol>
+      <div class="manual-tip"><b>Tené en cuenta:</b> si después cambia algún día del mes, la diferencia marcada deja de valer y la página avisa. Más abajo están el cruce de las tarjetas con J.H. y el cruce con el reporte mensual. <b>Exportar</b>, al final: el control entero en PDF, o en Excel.</div>
     </section>
 
     <section class="manual-module" id="c-lottery" style="--c: #B45309">
@@ -690,10 +699,10 @@
       <p class="manual-lede">Gettel como una sola cuenta (1.02.01.00 de Ratio, Kia y Toyota juntas), armada como el papel de trabajo de la auditoría: lo pendiente de cobro contra el saldo de la contabilidad.</p>
       {{ shot('kia-toyota', 'Kia y Toyota') }}
       <ol class="manual-steps">
-        <li><span class="n">1</span><p><b>Resumen</b>: el saldo de Ratio contra el total pendiente. "Dentro del margen" si la diferencia no pasa el margen (un pago con tarjeta no cae justo en el corte de un día).</p></li>
+        <li><span class="n">1</span><p><b>Resumen</b>, en tres tarjetas: el saldo de Ratio, lo pendiente de cobro y la diferencia. En verde si no pasa el margen (un pago con tarjeta no cae justo en el corte de un día).</p></li>
         <li><span class="n">2</span><p><b>Análisis del saldo</b>: los tres movimientos del mes (LIQUIDACION CIERRE RECAUDACION, COBRO GETTEL-KIA y REBATE GETTEL) contra los del mayor de Ratio.</p></li>
         <li><span class="n">3</span><p><b>Pendiente de cobro</b>: los días que todavía no pagaron, con el Local Account (A), el rebate (B) y el recargo del 3% (C).</p></li>
-        <li><span class="n">4</span><p><b>Pagos</b>: los recibos del mes en un solo cuadro, y la cuenta: a cobrar del mes, más los días pendientes del mes anterior, menos lo cobrado.</p></li>
+        <li><span class="n">4</span><p><b>Pagos</b>: los recibos del mes en un solo cuadro, con la empresa de cada uno, y la cuenta: a cobrar del mes, más los días pendientes del mes anterior, menos lo cobrado.</p></li>
       </ol>
       <div class="manual-tip"><b>Tené en cuenta:</b>
         <ul>
@@ -761,7 +770,12 @@
         <li><span class="n">6</span><p><b>Guardar %</b> después de cambiarlo.</p></li>
         <li><span class="n">7</span><p><b>Control contra el Balance</b>: con el mes cerrado, subí el Excel del Bce (hoja BALANCE HISTORICO). Se ve lo real al lado de lo proyectado.</p></li>
       </ol>
-      <div class="manual-tip"><b>Tené en cuenta:</b> Kia / Toyota no entra en la utilidad: es combustible a cuenta, no ganancia.</div>
+      <div class="manual-tip"><b>Tené en cuenta:</b>
+        <ul>
+          <li>Pasá el cursor por encima de un número (los subrayados con puntos): aparece un cartel con la cuenta de cómo se llegó a él, con los valores. Tocarlo sigue abriendo el desglose donde lo hay.</li>
+          <li>Kia / Toyota no entra en la utilidad: es combustible a cuenta, no ganancia.</li>
+        </ul>
+      </div>
     </section>
 
     <section class="manual-module" id="utilidad-neta" style="--c: #7A6BB0">
@@ -777,12 +791,13 @@
           <li>Lo que se paga una vez por mes (luz, agua, seguro, internet, alarma, teléfono, Elistar) toma lo real si ya se pagó y, si no, lo del mes anterior.</li>
           <li>Un débito de Chase sin categoría va a "Sin categoría en Chase". Categorizalo en Chase para que vaya a su renglón.</li>
           <li>Con el Bce del mes cargado, aparece la columna con lo real.</li>
+          <li>Con el cursor encima de un importe se ve cómo se calculó (por ejemplo, lo pagado ÷ días cargados × días del mes).</li>
         </ul>
       </div>
     </section>
   </div>
 </div>
-<p class="manual-footnote">Manual actualizado el 13/11/2026.</p>
+<p class="manual-footnote">Manual actualizado el 24/11/2026.</p>
 <script>
   (function () {
     // La rueda del mouse sobre el índice mueve solo su propio scroll, nunca

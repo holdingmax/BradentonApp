@@ -218,6 +218,99 @@ def set_sale_tax_record(year, month, registered, asiento=""):
     config_store.write(config_store.SALE_TAX, records)
 
 
+# La diferencia del asiento de un mes, marcada a mano (pedido del usuario,
+# 2026-11-24: "una forma de que se pueda marcar o reclasificar cuando haya
+# diferencias en el control del cierre, como en el caso de octubre, así no
+# queda siempre que hay una diferencia ese mes"). Dos formas:
+#   - "reclasificar": la diferencia va a una cuenta. El asiento suma ese
+#     renglón (del lado que hace falta) y cierra.
+#   - "revisada": queda explicada con una nota; el asiento sigue igual.
+# Se guarda con el importe de ese momento: si después la diferencia cambia
+# (se cargó o corrigió un día), la marca deja de valer y la página lo avisa.
+# {"2026-10": {"kind": "reclasificar", "amount": -70.0, "account": "...", "note": "...", "marked_at": "..."}}
+DIFFERENCE_KINDS = ("reclasificar", "revisada")
+
+
+def _load_difference_records():
+    try:
+        data = config_store.read(config_store.CIERRE_DIFERENCIAS)
+    except config_store.Unreadable:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def difference_record(year, month):
+    """La marca de la diferencia del asiento del mes, o None."""
+    return _load_difference_records().get(f"{year:04d}-{month:02d}")
+
+
+def set_difference_record(year, month, kind=None, amount=None, account="", note=""):
+    """Guarda la marca de la diferencia del mes; sin `kind`, la borra."""
+    records = _load_difference_records()
+    key = f"{year:04d}-{month:02d}"
+    if kind is None:
+        records.pop(key, None)
+    else:
+        if kind not in DIFFERENCE_KINDS:
+            raise ValueError("Elegí si la diferencia se reclasifica o se marca como revisada.")
+        if amount is None or abs(amount) < 0.005:
+            raise ValueError("Falta el importe de la diferencia.")
+        account = (account or "").strip()[:80]
+        if kind == "reclasificar" and not account:
+            raise ValueError("Para reclasificar, escribí la cuenta a la que va la diferencia.")
+        records[key] = {"kind": kind, "amount": round(amount, 2), "account": account if kind == "reclasificar" else "",
+                        "note": (note or "").strip()[:200], "marked_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    config_store.write(config_store.CIERRE_DIFERENCIAS, records)
+
+
+def _account_code(account):
+    """El código de cuenta con que empieza el texto ("2.01.05.00 - ANTICIPOS" -> "2.01.05.00"), o None."""
+    first = (account or "").split(" ")[0].strip()
+    return first if first and all(part.isdigit() for part in first.split(".")) and "." in first else None
+
+
+def apply_difference_record(entries):
+    """
+    Suma a `entries` (build_month_entries) la marca de la diferencia del mes:
+    `adjustment` con lo guardado, si cambió desde entonces (`stale`), y para
+    una reclasificación el renglón nuevo y los totales otra vez. Devuelve
+    `entries` (None si es None).
+    """
+    if not entries:
+        return entries
+    record = difference_record(entries["year"], entries["month"])
+    if not record:
+        return entries
+    adjustment = dict(record)
+    adjustment["stale"] = abs(entries["difference"] - (record.get("amount") or 0.0)) >= 0.005
+    adjustment["difference"] = entries["difference"]
+    entries["adjustment"] = adjustment
+    if record.get("kind") == "reclasificar" and not adjustment["stale"]:
+        amount = abs(record["amount"])
+        side = "credit" if record["amount"] > 0 else "debit"
+        line = {"side": side, "account": record["account"], "amount": amount, "code": _account_code(record["account"]),
+                "adjusted": True, "breakdown": [("Diferencia reclasificada a mano", amount)]
+                + ([(record["note"], None)] if record.get("note") else [])}
+        lines = entries["lines"]
+        if side == "debit":
+            at = max(i for i, l in enumerate(lines) if l["side"] == "debit") + 1
+            lines.insert(at, line)
+            entries["debit_with_lottery"] = round(entries["debit_with_lottery"] + amount, 2)
+        else:
+            lines.append(line)
+            entries["credit_with_lottery"] = round(entries["credit_with_lottery"] + amount, 2)
+        entries["debit_total"] = round(sum(l["amount"] for l in lines if l["side"] == "debit"), 2)
+        entries["credit_total"] = round(sum(l["amount"] for l in lines if l["side"] == "credit"), 2)
+        entries["difference"] = round(entries["debit_total"] - entries["credit_total"], 2)
+    return entries
+
+
+def difference_explained(entries):
+    """True si la diferencia que queda está marcada como revisada (y no cambió desde entonces)."""
+    adj = (entries or {}).get("adjustment")
+    return bool(adj and adj.get("kind") == "revisada" and not adj.get("stale"))
+
+
 def missing_notice(entries):
     """Aviso de datos que faltan (pantalla y PDF), o None si el mes está completo."""
     parts = []
@@ -360,17 +453,30 @@ def _fmt_days(days):
 def status_summary(entries, kia_not_in_cards):
     """(ok, título, párrafos) del estado de arriba de la página."""
     balanced = abs(entries["difference"]) < 0.005
+    explained = difference_explained(entries)
+    adj = entries.get("adjustment")
     notice = missing_notice(entries)
-    if not balanced:
+    if not balanced and not explained:
         title = f"El asiento no cierra: Debe y Haber difieren en {_money(entries['difference'])}."
     elif notice:
         title = "El asiento cierra, pero faltan datos."
     elif kia_not_in_cards:
         title = "El asiento cierra, pero hay un pago de Kia/Toyota para revisar."
+    elif explained:
+        title = f"Diferencia revisada: Debe y Haber difieren en {_money(entries['difference'])}, explicado abajo."
+    elif adj and adj.get("kind") == "reclasificar":
+        title = "Bien: el asiento cierra con la diferencia reclasificada."
     else:
         title = "Bien: el asiento cierra y no falta ningún dato."
     paragraphs = []
-    if not balanced:
+    if adj and not adj.get("stale"):
+        what = (f"reclasificada a {adj['account']}" if adj.get("kind") == "reclasificar" else "marcada como revisada")
+        paragraphs.append(f"Diferencia de {_money(adj['amount'])} {what}"
+                          + (f": {adj['note']}" if adj.get("note") else "") + f" (el {adj['marked_at'][8:10]}/{adj['marked_at'][5:7]}).")
+    elif adj:
+        paragraphs.append(f"La diferencia se había marcado con {_money(adj['amount'])} y ahora es {_money(adj['difference'])}: "
+                          "cambió algún día del mes. Revisala y volvé a marcarla.")
+    if not balanced and not explained:
         paragraphs.append("La diferencia no depende de LOTTO ni de VS: es Total Revenue contra Total Ventas de Store Info. "
                           "Buscá el día que no cierra en Store Info (un importe de tarjeta mal cargado, por ejemplo).")
     if notice:
@@ -380,7 +486,7 @@ def status_summary(entries, kia_not_in_cards):
                          for k in kia_not_in_cards)
         paragraphs.append(f"Pago de Kia/Toyota que no aparece en tarjetas: {days}. {ACCOUNT_JH} (Tarjetas − VS) queda corto ese día: "
                           "revisá si se cobró de otra forma o si el LOCAL ACCT está mal cargado.")
-    return balanced and not notice and not kia_not_in_cards, title, paragraphs
+    return (balanced or explained) and not notice and not kia_not_in_cards, title, paragraphs
 
 
 def jh_cards_summary(jh_cards, month_name, year):

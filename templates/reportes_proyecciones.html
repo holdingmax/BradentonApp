@@ -113,6 +113,9 @@
 {% macro icon_fuel() %}<svg class="proy-unit-icon proy-unit-icon-fuel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>{% endmacro %}
 {% macro icon_cstore() %}<svg class="proy-unit-icon proy-unit-icon-cstore" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0a3 3 0 0 0 6 0a3 3 0 0 0 6 0"/><path d="M5 11.5V21h14v-9.5"/><path d="M10 21v-5h4v5"/></svg>{% endmacro %}
 {% set p = projection %}
+{% set f = formulas %}
+{# La cuenta de cada número, en un cartel al pasar el cursor (data-formula, ver base.html). #}
+{% macro fx(text) %}{% if text %} data-formula="{{ text }}"{% endif %}{% endmacro %}
 {% set is_admin = current_user.is_authenticated and current_user.is_admin %}
 {% set fuel_sources = {"manual": "cargado a mano en Físico", "prev_month_computed": "el final teórico del mes anterior", "default": "sin inventario inicial"} %}
 
@@ -167,18 +170,18 @@
   {# La utilidad neta, y tocándola el desglose (pedido del usuario, 2026-11-02). #}
   <a class="proy-kpi proy-kpi-hero proy-kpi-link" href="{{ url_for('proyecciones_utilidad_neta', year=year, month=month) }}">
     <div class="proy-kpi-label">Utilidad neta proyectada <span class="proy-kpi-more">Ver desglose &rarr;</span></div>
-    <div class="proy-kpi-value" data-count="{{ net.net.proj or 0 }}">{{ money(net.net.proj, 0) }}</div>
+    <div class="proy-kpi-value" data-count="{{ net.net.proj or 0 }}"{{ fx(net.net.formula.proj) }}>{{ money(net.net.proj, 0) }}</div>
     <div class="proy-kpi-sub">bruta {{ money(net.gross.proj, 0) }} − gastos {{ money(net.expenses.proj, 0) }}</div>
   </a>
   <div class="proy-kpi proy-kpi-fuel">
     <div class="proy-kpi-label">{{ icon_fuel() }}Combustible</div>
-    <div class="proy-kpi-value" data-count="{{ p.fuel_proj.sales or 0 }}">{{ money(p.fuel_proj.sales, 0) }}</div>
+    <div class="proy-kpi-value" data-count="{{ p.fuel_proj.sales or 0 }}"{{ fx(f.fuel_sales_proj) }}>{{ money(p.fuel_proj.sales, 0) }}</div>
     <div class="proy-kpi-sub">venta proyectada · {{ num(p.fuel_proj.gallons, 0) }} gal</div>
   </div>
   {# Tocando el C-Store se baja al cuadro por rubro (pedido del usuario, 2026-11-02). #}
   <a class="proy-kpi proy-kpi-cstore proy-kpi-link" href="#proy-cstore">
     <div class="proy-kpi-label">{{ icon_cstore() }}C-Store</div>
-    <div class="proy-kpi-value" data-count="{{ cs.proj or 0 }}">{{ money(cs.proj, 0) }}</div>
+    <div class="proy-kpi-value" data-count="{{ cs.proj or 0 }}"{{ fx(f.cstore.proj) }}>{{ money(cs.proj, 0) }}</div>
     <div class="proy-kpi-sub">venta proyectada · margen {{ pct(cs.margin) }}</div>
   </a>
 </div>
@@ -191,15 +194,15 @@
   <div class="proy-split">
     <div class="proy-split-donut">
       <div class="proy-chart proy-chart-donut"><canvas id="proy-donut" role="img" aria-label="Qué parte de la utilidad bruta proyectada pone el combustible y cada rubro del C-Store"></canvas></div>
-      <div class="proy-donut-center"><span>Total</span><strong>{{ money(split.total, 0) }}</strong></div>
+      <div class="proy-donut-center"><span>Total</span><strong{{ fx(f.split_total) }}>{{ money(split.total, 0) }}</strong></div>
     </div>
     <div class="proy-split-list">
       <div class="proy-split-head"><span>Del total</span><span>Utilidad</span><span>%</span></div>
-      {% for name, color, unit, href in [("Combustible", "#2A78D6", split.fuel, none), ("C-Store", "#EB6834", split.cstore, "#proy-cstore")] %}
+      {% for name, color, unit, href, fv, fp in [("Combustible", "#2A78D6", split.fuel, none, f.split_fuel, f.split_fuel_pct), ("C-Store", "#EB6834", split.cstore, "#proy-cstore", f.split_cstore, f.split_cstore_pct)] %}
       <{{ 'a href="%s"'|format(href) if href else 'div' }} class="proy-split-row proy-split-unit">
         <span class="proy-split-name"><i class="proy-sq" style="background: {{ color }};"></i>{{ name }}</span>
-        <span class="proy-split-num">{{ money(unit.value, 0) }}</span>
-        <span class="proy-split-num proy-split-pct">{{ pct0(unit.pct_total) }}</span>
+        <span class="proy-split-num"><span{{ fx(fv) }}>{{ money(unit.value, 0) }}</span></span>
+        <span class="proy-split-num proy-split-pct"><span{{ fx(fp) }}>{{ pct0(unit.pct_total) }}</span></span>
         <span class="proy-split-bar"><i style="width: {{ ((unit.pct_total or 0) * 100)|round(1) }}%; background: {{ color }};"></i></span>
       </{{ 'a' if href else 'div' }}>
       {% endfor %}
@@ -207,8 +210,9 @@
       {% for part in split.cstore.parts %}
       <a class="proy-split-row proy-split-part" href="#proy-cstore">
         <span class="proy-split-name"><i class="proy-sq" style="background: {{ part_colors[loop.index0] }};"></i>{{ part.label }}</span>
-        <span class="proy-split-num">{{ money(part.value, 0) }}</span>
-        <span class="proy-split-num proy-split-pct">{{ pct0(part.pct_cstore) }}</span>
+        {% set fpart = f.split_parts[part.key] %}
+        <span class="proy-split-num"><span{{ fx(fpart.value) }}>{{ money(part.value, 0) }}</span></span>
+        <span class="proy-split-num proy-split-pct"><span{{ fx(fpart.pct) }}>{{ pct0(part.pct_cstore) }}</span></span>
         <span class="proy-split-bar"><i style="width: {{ ((part.pct_cstore or 0) * 100)|round(1) }}%; background: {{ part_colors[loop.index0] }};"></i></span>
       </a>
       {% endfor %}
@@ -230,28 +234,28 @@
       <div class="proy-sum-title">{{ icon_fuel() }}Combustible</div>
       <div class="proy-sum-table">
         <span></span><span class="proy-sum-head">Hasta hoy</span><span class="proy-sum-head proy-sum-head-proj">Proyectado</span>
-        <span>Galones</span><strong>{{ num(p.fuel.gallons, 0) }}</strong><strong class="proy-sum-proj">{{ num(p.fuel_proj.gallons, 0) }}</strong>
-        <span>Venta</span><strong>{{ money(p.fuel.sales, 0) }}</strong><strong class="proy-sum-proj">{{ money(p.fuel_proj.sales, 0) }}</strong>
-        <span>Utilidad</span><strong>{{ money(p.fuel.utilidad, 0) }}</strong><strong class="proy-sum-proj">{{ money(p.fuel_proj.utilidad, 0) }}</strong>
-        <span>Margen / gal</span><strong class="{{ 'proy-neg' if p.fuel.margin_gal is not none and p.fuel.margin_gal < 0 }}">{{ money(p.fuel.margin_gal, 4) }}</strong><span></span>
+        <span>Galones</span><strong{{ fx(f.fuel_gallons) }}>{{ num(p.fuel.gallons, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.fuel_gallons_proj) }}>{{ num(p.fuel_proj.gallons, 0) }}</strong>
+        <span>Venta</span><strong{{ fx(f.fuel_sales) }}>{{ money(p.fuel.sales, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.fuel_sales_proj) }}>{{ money(p.fuel_proj.sales, 0) }}</strong>
+        <span>Utilidad</span><strong{{ fx(f.fuel_util) }}>{{ money(p.fuel.utilidad, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.fuel_util_proj) }}>{{ money(p.fuel_proj.utilidad, 0) }}</strong>
+        <span>Margen / gal</span><strong class="{{ 'proy-neg' if p.fuel.margin_gal is not none and p.fuel.margin_gal < 0 }}"{{ fx(f.fuel_margin_gal) }}>{{ money(p.fuel.margin_gal, 4) }}</strong><span></span>
       </div>
     </div>
     <div class="proy-sum-unit">
       <div class="proy-sum-title">{{ icon_cstore() }}C-Store</div>
       <div class="proy-sum-table">
         <span></span><span class="proy-sum-head">Hasta hoy</span><span class="proy-sum-head proy-sum-head-proj">Proyectado</span>
-        <span>Venta</span><strong>{{ money(cs.amount, 0) }}</strong><strong class="proy-sum-proj">{{ money(cs.proj, 0) }}</strong>
-        <span>Utilidad de los rubros</span><strong>{{ money(cs.utilidad, 0) }}</strong><strong class="proy-sum-proj">{{ money(cs.utilidad_proj, 0) }}</strong>
-        <span>Comisión Lottery</span><strong>{{ money(lot.comm, 0) }}</strong><strong class="proy-sum-proj">{{ money(lot.comm_proj, 0) }}</strong>
-        <span>Utilidad</span><strong>{{ money(cwl.utilidad, 0) }}</strong><strong class="proy-sum-proj">{{ money(cwl.utilidad_proj, 0) }}</strong>
-        <span>Margen</span><strong>{{ pct(cs.margin) }}</strong><span></span>
+        <span>Venta</span><strong{{ fx(f.cstore.amount) }}>{{ money(cs.amount, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.cstore.proj) }}>{{ money(cs.proj, 0) }}</strong>
+        <span>Utilidad de los rubros</span><strong{{ fx(f.cstore.utilidad) }}>{{ money(cs.utilidad, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.cstore.utilidad_proj) }}>{{ money(cs.utilidad_proj, 0) }}</strong>
+        <span>Comisión Lottery</span><strong{{ fx(f.rubros["LOTERY/LOTTO"].utilidad) }}>{{ money(lot.comm, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.rubros["LOTERY/LOTTO"].utilidad_proj) }}>{{ money(lot.comm_proj, 0) }}</strong>
+        <span>Utilidad</span><strong{{ fx(f.cstore_lottery.utilidad) }}>{{ money(cwl.utilidad, 0) }}</strong><strong class="proy-sum-proj"{{ fx(f.cstore_lottery.utilidad_proj) }}>{{ money(cwl.utilidad_proj, 0) }}</strong>
+        <span>Margen</span><strong{{ fx(f.cstore.margin) }}>{{ pct(cs.margin) }}</strong><span></span>
       </div>
     </div>
   </div>
   <div class="proy-sum-band">
     <span>Utilidad bruta de las dos unidades</span>
     <span>
-      Hasta hoy <strong>{{ money(util_now, 0) }}</strong> · Proyectada <strong class="proy-sum-proj">{{ money(util_proj, 0) }}</strong>
+      Hasta hoy <strong{{ fx(f.util_now) }}>{{ money(util_now, 0) }}</strong> · Proyectada <strong class="proy-sum-proj"{{ fx(f.util_proj) }}>{{ money(util_proj, 0) }}</strong>
       {% if split %} · Combustible {{ pct0(split.fuel.pct_total) }} / C-Store {{ pct0(split.cstore.pct_total) }}{% endif %}
     </span>
   </div>
@@ -261,22 +265,22 @@
 <div class="card">
   <h2 class="proy-unit-title">{{ icon_fuel() }}Combustible</h2>
   <div class="proy-stat-grid">
-    {% for label, key, kind in [("Galones", "gallons", "gal"), ("Venta", "sales", "$"), ("Utilidad", "utilidad", "$")] %}
+    {% for label, key, kind, fk in [("Galones", "gallons", "gal", "fuel_gallons"), ("Venta", "sales", "$", "fuel_sales"), ("Utilidad", "utilidad", "$", "fuel_util")] %}
     <div class="proy-stat">
       <div class="proy-stat-label">{{ label }}</div>
-      <div class="proy-stat-actual">{% if kind == "gal" %}{{ num(p.fuel[key]) }}{% else %}{{ money(p.fuel[key]) }}{% endif %}</div>
+      <div class="proy-stat-actual"><span{{ fx(f[fk]) }}>{% if kind == "gal" %}{{ num(p.fuel[key]) }}{% else %}{{ money(p.fuel[key]) }}{% endif %}</span></div>
       <div class="proy-stat-proj-row">
         <span class="proy-legend-chip proy-legend-proj">Proyectado</span>
-        <span class="proy-stat-proj-value">{% if kind == "gal" %}{{ num(p.fuel_proj[key]) }}{% else %}{{ money(p.fuel_proj[key]) }}{% endif %}</span>
+        <span class="proy-stat-proj-value"{{ fx(f[fk ~ "_proj"]) }}>{% if kind == "gal" %}{{ num(p.fuel_proj[key]) }}{% else %}{{ money(p.fuel_proj[key]) }}{% endif %}</span>
       </div>
     </div>
     {% endfor %}
     <div class="proy-stat">
       <div class="proy-stat-label">Por galón</div>
       <div class="proy-per-gal">
-        <span>Precio de venta</span><strong>{{ money(p.fuel.price, 4) }}</strong>
-        <span>Costo (PPP)</span><strong>{{ money(p.ppp, 4) }}</strong>
-        <span>Margen</span><strong class="{{ 'proy-neg' if p.fuel.margin_gal is not none and p.fuel.margin_gal < 0 }}">{{ money(p.fuel.margin_gal, 4) }}</strong>
+        <span>Precio de venta</span><strong{{ fx(f.fuel_price) }}>{{ money(p.fuel.price, 4) }}</strong>
+        <span>Costo (PPP)</span><strong{{ fx(f.ppp) }}>{{ money(p.ppp, 4) }}</strong>
+        <span>Margen</span><strong class="{{ 'proy-neg' if p.fuel.margin_gal is not none and p.fuel.margin_gal < 0 }}"{{ fx(f.fuel_margin_gal) }}>{{ money(p.fuel.margin_gal, 4) }}</strong>
       </div>
     </div>
   </div>
@@ -305,45 +309,47 @@
           {# Kia / Toyota es combustible a cuenta: se ve lo vendido, pero no es ganancia. #}
           <tr class="proy-row-aside">
             <td>{{ r.display }} <span class="proy-th-sub">no es ganancia</span></td>
-            <td>{{ money(r.amount) }}</td>
+            <td><span{{ fx(f.rubros[r.label].amount) }}>{{ money(r.amount) }}</span></td>
             <td>—</td>
             <td>—</td>
-            <td class="proy-cell-proj">{{ money(r.proj) }}</td>
+            <td class="proy-cell-proj"><span{{ fx(f.rubros[r.label].proj) }}>{{ money(r.proj) }}</span></td>
             <td class="proy-cell-proj">—</td>
           </tr>
           {% elif r.lottery %}
           {# Lottery: la comisión real de las semanas que se pagan en el mes, y su % sobre lo vendido. #}
           <tr>
             <td>{{ r.display }} <span class="proy-th-sub">comisión real</span></td>
-            <td>{{ money(r.amount) }}</td>
-            <td>{{ pct(r.margin) }}</td>
-            <td>{{ money(r.utilidad) }}</td>
-            <td class="proy-cell-proj">{{ money(r.proj) }}</td>
-            <td class="proy-cell-proj">{{ money(r.utilidad_proj) }}</td>
+            {% set fr = f.rubros[r.label] %}
+            <td><span{{ fx(fr.amount) }}>{{ money(r.amount) }}</span></td>
+            <td><span{{ fx(fr.margin) }}>{{ pct(r.margin) }}</span></td>
+            <td><span{{ fx(fr.utilidad) }}>{{ money(r.utilidad) }}</span></td>
+            <td class="proy-cell-proj"><span{{ fx(fr.proj) }}>{{ money(r.proj) }}</span></td>
+            <td class="proy-cell-proj"><span{{ fx(fr.utilidad_proj) }}>{{ money(r.utilidad_proj) }}</span></td>
           </tr>
           {% else %}
           <tr class="{{ '' if r.in_balance else 'proy-row-aside' }}">
             <td>{{ r.display }}</td>
-            <td>{{ money(r.amount) }}</td>
+            {% set fr = f.rubros[r.label] %}
+            <td><span{{ fx(fr.amount) }}>{{ money(r.amount) }}</span></td>
             <td>
               {% if is_admin %}
               <input type="number" step="0.01" min="0" max="100" class="proy-margin-input" name="margin_{{ r.label }}" value="{{ '%.2f'|format(r.margin * 100) }}"> %
-              {% else %}{{ pct(r.margin) }}{% endif %}
+              {% else %}<span{{ fx(fr.margin) }}>{{ pct(r.margin) }}</span>{% endif %}
             </td>
-            <td>{{ money(r.utilidad) }}</td>
-            <td class="proy-cell-proj">{{ money(r.proj) }}</td>
-            <td class="proy-cell-proj">{{ money(r.utilidad_proj) }}</td>
+            <td><span{{ fx(fr.utilidad) }}>{{ money(r.utilidad) }}</span></td>
+            <td class="proy-cell-proj"><span{{ fx(fr.proj) }}>{{ money(r.proj) }}</span></td>
+            <td class="proy-cell-proj"><span{{ fx(fr.utilidad_proj) }}>{{ money(r.utilidad_proj) }}</span></td>
           </tr>
           {% endif %}
           {% endfor %}
-          {% for title, block in [("C-Store", p.cstore.balance), ("C-Store con Lottery", cwl)] %}
+          {% for title, block, fb in [("C-Store", p.cstore.balance, f.cstore), ("C-Store con Lottery", cwl, f.cstore_lottery)] %}
           <tr class="reporte-totals-row">
             <td>{{ title }}</td>
-            <td>{{ money(block.amount) }}</td>
-            <td>{{ pct(block.margin) }}</td>
-            <td>{{ money(block.utilidad) }}</td>
-            <td class="proy-cell-proj">{{ money(block.proj) }}</td>
-            <td class="proy-cell-proj">{{ money(block.utilidad_proj) }}</td>
+            <td><span{{ fx(fb.amount) }}>{{ money(block.amount) }}</span></td>
+            <td><span{{ fx(fb.margin) }}>{{ pct(block.margin) }}</span></td>
+            <td><span{{ fx(fb.utilidad) }}>{{ money(block.utilidad) }}</span></td>
+            <td class="proy-cell-proj"><span{{ fx(fb.proj) }}>{{ money(block.proj) }}</span></td>
+            <td class="proy-cell-proj"><span{{ fx(fb.utilidad_proj) }}>{{ money(block.utilidad_proj) }}</span></td>
           </tr>
           {% endfor %}
         </tbody>
