@@ -100,6 +100,26 @@
   .proy-actions { margin-top: 12px; }
   .proy-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
   .proy-upload .muted { font-size: 12.5px; }
+  /* Fechas de corte de cada fuente, con semáforo (2026-11-24). */
+  .proy-sources { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 12.5px; }
+  .proy-source { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); }
+  .proy-source i { width: 9px; height: 9px; border-radius: 50%; background: var(--text-soft); }
+  .proy-source.ok i { background: var(--success); }
+  .proy-source.late i { background: #D97706; }
+  .proy-source.bad i { background: var(--error); }
+  .proy-source.bad { border-color: #FECACA; background: #FEF2F2; }
+  .proy-sources-note { flex-basis: 100%; color: var(--error); font-weight: 600; }
+  .proy-alert { margin-bottom: 18px; padding: 12px 16px; border-radius: var(--radius); border: 1px solid #FCD34D; background: #FFFBEB; font-size: 13.5px; line-height: 1.5; }
+  /* El puente de la venta a la utilidad neta (2026-11-24). */
+  .proy-bridge { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .proy-bridge th, .proy-bridge td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: right; }
+  .proy-bridge th:first-child, .proy-bridge td:first-child { text-align: left; }
+  .proy-bridge thead th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-soft); }
+  .proy-bridge .proy-bridge-op { display: inline-block; width: 18px; color: var(--text-soft); font-weight: 700; }
+  .proy-bridge tr.proy-bridge-sub td { font-weight: 700; background: var(--surface-alt); }
+  .proy-bridge tr.proy-bridge-net td { font-weight: 700; font-size: 15px; background: var(--accent-soft); border-top: 2px solid var(--accent); }
+  .proy-bridge td.proy-cell-proj { color: var(--accent); font-weight: 600; }
+  .proy-bridge .proy-th-sub { display: block; font-size: 11.5px; font-weight: 400; color: var(--text-soft); }
 </style>
 {% endblock %}
 {% block main_class %}main-full{% endblock %}
@@ -123,8 +143,7 @@
   <span class="eyebrow">Panel de proyecciones</span>
   <h1>Proyecciones</h1>
   <p class="page-subtitle">
-    Lo vendido en los días cargados y cómo cerraría el mes al mismo ritmo ({{ p.days_in_month }} días).
-    Igual que la hoja "Store Info" del Excel Cierre, con los días reales del mes en vez de 30.
+    Proyección: lo vendido hasta hoy ÷ días cargados × días del mes ({{ p.days_in_month }}).
   </p>
 </div>
 
@@ -147,6 +166,15 @@
       {% if p.last_day %}<span class="muted">(el último, {{ p.last_day.strftime('%d/%m') }})</span>{% endif %}
     </div>
     <div class="proy-days-bar"><div class="proy-days-bar-fill" style="width: {{ (p.days_loaded / p.days_in_month * 100) if p.days_in_month else 0 }}%;"></div></div>
+    {# Hasta qué día está cargada cada fuente, con semáforo (2026-11-24). #}
+    <div class="proy-sources">
+      {% for src in net.sources %}
+      <span class="proy-source {{ src.status or '' }}" title="{{ {'ok': 'Al día', 'late': 'Atrasada', 'bad': 'Muy atrasada o sin datos del mes'}.get(src.status, '') }}"><i></i>{{ src.name }}: {{ src.last.strftime('%d/%m') if src.last else 'sin datos' }}</span>
+      {% endfor %}
+      {% if net.sources|selectattr("status", "equalto", "bad")|list %}
+      <span class="proy-sources-note">Con fuentes atrasadas la proyección no es confiable: cargá lo que falta.</span>
+      {% endif %}
+    </div>
   </div>
 </div>
 
@@ -164,6 +192,14 @@
 {% set split = p.split %}
 {# Un tono del naranja del C-Store por rubro, en el orden de split.cstore.parts (Lottery al final). #}
 {% set part_colors = ["#9A3412", "#C2410C", "#EB6834", "#F59E6B", "#FBC9A6"] %}
+
+{% if net.pending.count %}
+<div class="proy-alert">
+  Hay <strong>{{ money(net.pending.amount) }}</strong> en {{ net.pending.count }} débito{{ '' if net.pending.count == 1 else 's' }} de Chase sin categoría en {{ month_name|lower }}.
+  No entran en la utilidad neta hasta que los categorices en <a href="{{ url_for('chase_historial', year=year, month=month) }}">Carga de Datos → Chase</a>
+  (si son pagos de combustible a J.H., ya están contados en el costo por el PPP).
+</div>
+{% endif %}
 
 {# ---------------- Gráficos (pedido del usuario, 2026-10-27) ---------------- #}
 <div class="proy-kpi-grid">
@@ -188,8 +224,43 @@
 
 {# La utilidad bruta proyectada: el combustible solo y el C-Store abierto en sus rubros más
    Lottery (pedido del usuario, 2026-11-02; el gráfico del mes día por día se sacó). #}
+{# De la venta a la utilidad neta (2026-11-24): el margen de ventas del gráfico de abajo no es la
+   utilidad bruta del desglose; este cuadro muestra qué se suma y qué se resta entre uno y otro. #}
+{% set b = net.bridge %}
+{% macro nfx(obj, field) %}{% if obj and obj.formula and obj.formula[field] %} data-formula="{{ obj.formula[field] }}"{% endif %}{% endmacro %}
 <div class="card">
-  <h2>Utilidad bruta proyectada</h2>
+  <h2>De la venta a la utilidad neta</h2>
+  <div class="historial-table-wrap" style="border: 0;">
+    <table class="proy-bridge">
+      <thead><tr><th></th><th>Hasta hoy</th><th>Proyectado</th></tr></thead>
+      <tbody>
+        <tr><td><span class="proy-bridge-op"></span>Margen de ventas<span class="proy-th-sub">combustible + C-Store con Lottery</span></td>
+          <td><span{{ nfx(b.sales_margin, "actual") }}>{{ money(b.sales_margin.actual, 0) }}</span></td>
+          <td class="proy-cell-proj"><span{{ nfx(b.sales_margin, "proj") }}>{{ money(b.sales_margin.proj, 0) }}</span></td></tr>
+        <tr><td><span class="proy-bridge-op">+</span>Otros ingresos<span class="proy-th-sub">rebates, hielo, Food Truck, Vaccumms</span></td>
+          <td><span{{ nfx(b.other_income, "actual") }}>{{ money(b.other_income.actual, 0) }}</span></td>
+          <td class="proy-cell-proj"><span{{ nfx(b.other_income, "proj") }}>{{ money(b.other_income.proj, 0) }}</span></td></tr>
+        <tr><td><span class="proy-bridge-op">−</span>Fees de tarjeta</td>
+          <td><span{{ nfx(b.fees, "actual") }}>{{ money(-b.fees.actual if b.fees.actual is not none else none, 0) }}</span></td>
+          <td class="proy-cell-proj"><span{{ nfx(b.fees, "proj") }}>{{ money(-b.fees.proj if b.fees.proj is not none else none, 0) }}</span></td></tr>
+        <tr class="proy-bridge-sub"><td><span class="proy-bridge-op">=</span>Utilidad bruta</td>
+          <td><span{{ nfx(net.gross, "actual") }}>{{ money(net.gross.actual, 0) }}</span></td>
+          <td class="proy-cell-proj"><span{{ nfx(net.gross, "proj") }}>{{ money(net.gross.proj, 0) }}</span></td></tr>
+        <tr><td><span class="proy-bridge-op">−</span>Gastos<span class="proy-th-sub">Chase por categoría y Caja</span></td>
+          <td><span{{ nfx(net.expenses, "actual") }}>{{ money(net.expenses.actual, 0) }}</span></td>
+          <td class="proy-cell-proj"><span{{ nfx(net.expenses, "proj") }}>{{ money(net.expenses.proj, 0) }}</span></td></tr>
+        <tr class="proy-bridge-net"><td><span class="proy-bridge-op">=</span><a href="{{ url_for('proyecciones_utilidad_neta', year=year, month=month) }}">Utilidad neta</a></td>
+          <td><span{{ nfx(net.net, "actual") }}>{{ money(net.net.actual, 0) }}</span></td>
+          <td><span{{ nfx(net.net, "proj") }}>{{ money(net.net.proj, 0) }}</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  {% if net.pending.count %}<p class="muted proy-note">Sin contar {{ money(net.pending.amount, 0) }} de Chase sin categoría (pendiente).</p>{% endif %}
+</div>
+
+<div class="card">
+  <h2>Margen de ventas proyectado</h2>
+  <p class="muted proy-note" style="margin: -8px 0 14px;">Lo que deja la venta: combustible (venta − costo al PPP) y C-Store por rubro con Lottery. Todavía sin otros ingresos, fees ni gastos.</p>
   {% if split %}
   <div class="proy-split">
     <div class="proy-split-donut">
@@ -254,7 +325,7 @@
     </div>
   </div>
   <div class="proy-sum-band">
-    <span>Utilidad bruta de las dos unidades</span>
+    <span>Margen de ventas de las dos unidades</span>
     <span>
       Hasta hoy <strong{{ fx(f.util_now) }}>{{ money(util_now, 0) }}</strong> · Proyectada <strong class="proy-sum-proj"{{ fx(f.util_proj) }}>{{ money(util_proj, 0) }}</strong>
       {% if split %} · Combustible {{ pct0(split.fuel.pct_total) }} / C-Store {{ pct0(split.cstore.pct_total) }}{% endif %}

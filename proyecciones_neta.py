@@ -14,8 +14,15 @@ Todo sale de lo que se carga día a día:
 A fin de mes se proyecta así:
   - Lo que se paga una vez por mes (MONTHLY): lo real si ya se pagó; si
     todavía no, lo del mes anterior.
-  - Lo demás: lo real hasta el último día cargado, al mismo ritmo hasta fin
-    de mes. Sin ningún día cargado, lo del mes anterior.
+  - Lo que entra o sale de golpe (UNTIL_COMPLETE: sueldos quincenales,
+    rebates, el Food Truck): el mayor entre lo del mes y el mes anterior,
+    hasta que el mes esté completo.
+  - Lo demás: al ritmo de los días cargados, pero recién con MIN_DAYS días;
+    antes, el mayor entre lo del mes y el mes anterior (2026-11-24: con 6
+    días de Chase, un pago grande multiplicado por 5 tiraba el mes a pérdida).
+  - Lo de Chase sin categoría no entra en la utilidad neta: queda aparte,
+    como pendiente de categorizar (podría ser un pago de combustible que ya
+    entra por el PPP).
 
 Chase es lo que se paga y el Bce lo que corresponde al mes, así que algunos
 renglones no coinciden (en agosto 2026: sueldos $12.288 contra $16.738). Por
@@ -52,9 +59,12 @@ EXPENSES = (
 )
 # Las facturas de una vez por mes.
 MONTHLY = {"ENERGIA ELECTRICA", "AGUA", "SEGURO", "INTERNET", "ALARMA", "TELEFONO", "ELISTAR"}
-# El alquiler del Food Truck es fijo pero entra en varios depósitos: hasta
-# que llega todo, lo del mes anterior.
-FIXED = {"FOOD TRUCK"}
+# Lo que entra o sale de golpe: el alquiler del Food Truck (fijo, en varios
+# depósitos), los sueldos (quincenales) y los rebates. Hasta que el mes está
+# completo, el mayor entre lo del mes y el mes anterior.
+UNTIL_COMPLETE = {"FOOD TRUCK", "SUELDOS", "SUELDO", "REBATE", "REBATE COMBUSTIBLE"}
+# Con menos días cargados que esto no se proyecta al ritmo (2026-11-24).
+MIN_DAYS = 15
 
 
 def _prev_month(year, month):
@@ -72,11 +82,12 @@ def _elapsed(last, year, month):
 
 
 def _at_pace(actual, elapsed, days_in_month, previous):
+    """Al ritmo de los días cargados, con MIN_DAYS como mínimo; antes, el mayor con el mes anterior."""
     if elapsed >= days_in_month:
         return actual
-    if elapsed:
+    if elapsed >= MIN_DAYS:
         return actual * days_in_month / elapsed
-    return previous
+    return max(actual, previous)
 
 
 def _chase_by_category(year, month):
@@ -119,10 +130,30 @@ def _pace_text(actual, elapsed, days_in_month, previous, what=""):
     """Cómo sale `_at_pace`, en palabras y con los números."""
     if elapsed >= days_in_month:
         return f"{_money(actual)}{what} (el mes completo)"
-    if elapsed:
-        return (f"{_money(actual)}{what} ÷ {elapsed} día{'' if elapsed == 1 else 's'} cargado{'' if elapsed == 1 else 's'}"
+    if elapsed >= MIN_DAYS:
+        return (f"{_money(actual)}{what} ÷ {elapsed} días cargados"
                 f" × {days_in_month} días del mes = {_money(actual * days_in_month / elapsed)}")
-    return f"sin nada cargado del mes: lo del mes anterior, {_money(previous)}"
+    return (f"{elapsed} día{'' if elapsed == 1 else 's'} cargado{'' if elapsed == 1 else 's'} (menos de {MIN_DAYS}): el mayor entre"
+            f" lo del mes {_money(actual)}{what} y el mes anterior {_money(previous)} = {_money(max(actual, previous))}")
+
+
+def freshness(last, year, month, today=None):
+    """
+    Semáforo de una fuente (pedido del usuario, 2026-11-24): "ok" si está al
+    día (2 días o menos de atraso, o el mes completo), "late" hasta 6 y "bad"
+    con más o sin nada del mes. None para un mes que todavía no empezó.
+    """
+    today = today or dt.date.today()
+    first = dt.date(year, month, 1)
+    last_of_month = dt.date(year, month, calendar.monthrange(year, month)[1])
+    if first > today:
+        return None
+    if last is None or last < first:
+        return "bad"
+    if last >= last_of_month:
+        return "ok"
+    lag = (min(today, last_of_month) - last).days
+    return "ok" if lag <= 2 else ("late" if lag <= 6 else "bad")
 
 
 def _line(label, source, actual, proj, bce=None, formula=None):
@@ -175,9 +206,9 @@ def build_net(year, month, projection=None):
                 proj += now if now else previous
                 steps.append(f"{name}: lo pagado en el mes, {_money(now)}" if now
                              else f"{name}: todavía no se pagó, lo del mes anterior {_money(previous)}")
-            elif category in FIXED:
+            elif category in UNTIL_COMPLETE:
                 proj += max(now, previous)
-                steps.append(f"{name}: el mayor entre el mes ({_money(now)}) y el mes anterior ({_money(previous)})")
+                steps.append(f"{name}: hasta completar el mes, el mayor entre lo del mes ({_money(now)}) y el mes anterior ({_money(previous)})")
             else:
                 proj += _at_pace(now, chase_elapsed, days_in_month, previous)
                 steps.append(f"{name}: " + _pace_text(now, chase_elapsed, days_in_month, previous))
@@ -190,8 +221,10 @@ def build_net(year, month, projection=None):
             how = ""
         elif any(c in MONTHLY for c in categories):
             how = "si todavía no se pagó, la del mes anterior"
-        elif any(c in FIXED for c in categories):
-            how = "hasta que entre todo, lo del mes anterior"
+        elif any(c in UNTIL_COMPLETE for c in categories):
+            how = "hasta completar el mes, el mayor con el mes anterior"
+        elif chase_elapsed < MIN_DAYS:
+            how = f"menos de {MIN_DAYS} días cargados: el mayor con el mes anterior"
         elif chase_until:
             how = f"al ritmo hasta el {chase_until.strftime('%d/%m')}"
         else:
@@ -252,8 +285,10 @@ def build_net(year, month, projection=None):
     fees_prev, _ = _card_fees(prev_year, prev_month)
     coupon_elapsed = _elapsed(last_coupon, year, month)
     fees_source = "Cupones: fees por fecha de venta"
-    if coupon_elapsed and coupon_elapsed < days_in_month:
+    if MIN_DAYS <= coupon_elapsed < days_in_month:
         fees_source += f" · al ritmo hasta el {last_coupon.strftime('%d/%m')}"
+    elif coupon_elapsed < MIN_DAYS:
+        fees_source += f" · menos de {MIN_DAYS} días cargados: el mayor con el mes anterior"
     cards = _group("Gastos de tarjeta", [
         _line("Fees de tarjeta", fees_source, -fees, -_at_pace(fees, coupon_elapsed, days_in_month, fees_prev),
               formula={"actual": "Fees de los cupones con fecha de venta en el mes",
@@ -286,11 +321,11 @@ def build_net(year, month, projection=None):
             line = _line(label, "No tiene categoría en Chase", 0.0, 0.0)
         line["bce"] = bce(field, sign=-1)
         expense_lines.append(line)
-    uncategorized = chase_line("Sin categoría en Chase", ("",), sign=-1)
-    uncategorized["source"] = "Chase: débitos sin categoría (categorizalos en Chase para que vayan a su renglón)"
-    if chase_elapsed and chase_elapsed < days_in_month:
-        uncategorized["source"] += f" · al ritmo hasta el {chase_until.strftime('%d/%m')}"
-    expense_lines.append(uncategorized)
+    # Lo de Chase sin categoría queda aparte: no entra en la utilidad neta
+    # hasta que se categorice (2026-11-24).
+    uncategorized = [tx for tx in chase_db.get_month_transactions(year, month)
+                     if not (tx.get("detalle") or "") and (tx.get("amount") or 0.0) < 0]
+    pending = {"amount": -sum(tx.get("amount") or 0.0 for tx in uncategorized) + 0.0, "count": len(uncategorized)}
     expenses = _group("Gastos", expense_lines, bce=bce("gastos_directos", "otros_gastos", sign=-1))
 
     def add(groups, field):
@@ -305,6 +340,23 @@ def build_net(year, month, projection=None):
     net["bce"] = bce("resultado_neto")
     gross["formula"] = {field: " + ".join(f"{g['title']} {_money(g[field])}" for g in gross_groups) + f" = {_money(gross[field])}"
                         for field in ("actual", "proj")}
+
+    # El puente de la venta a la utilidad neta (2026-11-24): el margen de
+    # ventas (combustible + C-Store con Lottery, lo del gráfico del Panel),
+    # más los otros ingresos, menos los fees = utilidad bruta, menos gastos.
+    sales_lines = [fuel["lines"][0]] + cstore["lines"][:-1] + lottery["lines"]
+    income_lines = [fuel["lines"][1], cstore["lines"][-1]] + others["lines"]
+
+    def part(title, lines):
+        return {"title": title, **{f: add(lines, f) for f in ("actual", "proj")},
+                "formula": {f: " + ".join(f"{ln['label']} {_money(ln[f])}" for ln in lines) + f" = {_money(add(lines, f))}"
+                            for f in ("actual", "proj")}}
+
+    bridge = {
+        "sales_margin": part("Margen de ventas", sales_lines),
+        "other_income": part("Otros ingresos", income_lines),
+        "fees": part("Fees de tarjeta", cards["lines"]),
+    }
     net["formula"] = {field: f"Utilidad bruta {_money(gross[field])} − gastos {_money(expenses[field])} = {_money(net[field])}"
                       for field in ("actual", "proj")}
     return {
@@ -313,6 +365,15 @@ def build_net(year, month, projection=None):
         "days_in_month": days_in_month,
         "last_store_day": p["last_day"],
         "last_chase_day": last_chase,
+        "last_coupon_day": last_coupon,
+        "sources": [
+            {"name": "Close Store", "last": p["last_day"], "status": freshness(p["last_day"], year, month)},
+            {"name": "Chase", "last": last_chase, "status": freshness(last_chase, year, month)},
+            {"name": "Cupones", "last": last_coupon, "status": freshness(last_coupon, year, month)},
+        ],
+        "pending": pending,
+        "bridge": bridge,
+        "min_days": MIN_DAYS,
         "gross_groups": gross_groups,
         "gross": gross,
         "expenses": expenses,

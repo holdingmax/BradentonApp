@@ -759,10 +759,10 @@
       <p class="manual-lede">Lo vendido hasta hoy y lo proyectado a fin de mes, como la hoja Store Info del Excel Cierre con los días reales del mes.</p>
       {{ shot('proyecciones', 'Proyecciones') }}
       <ol class="manual-steps">
-        <li><span class="n">1</span><p>Elegí el mes. La barra dice cuántos días tienen el Close Store cargado.</p></li>
+        <li><span class="n">1</span><p>Elegí el mes. La barra dice cuántos días tienen el Close Store cargado, y abajo hasta qué día está cargado Close Store, Chase y Cupones: verde al día, ámbar atrasado, rojo muy atrasado (con una fuente en rojo la proyección no es confiable). Si hay débitos de Chase sin categoría, un aviso dice cuánto suman: no entran en la utilidad neta hasta categorizarlos.</p></li>
         <li><span class="n">2</span><p><b>Utilidad neta proyectada</b>. Tocala (Ver desglose) para el detalle.</p></li>
         <li><span class="n">3</span><p>La venta proyectada de combustible y del C-Store.</p></li>
-        <li><span class="n">4</span><p>La utilidad bruta de cada unidad y de cada rubro del C-Store.</p></li>
+        <li><span class="n">4</span><p><b>De la venta a la utilidad neta</b>: el margen de ventas (combustible + C-Store con Lottery) + otros ingresos − fees de tarjeta = utilidad bruta − gastos = utilidad neta. Más abajo, el margen de ventas por unidad y por rubro.</p></li>
       </ol>
       {{ shot('proyecciones-combustible', 'Cómo se proyecta el combustible') }}
       <ol class="manual-steps" start="5">
@@ -793,7 +793,8 @@
       <div class="manual-tip"><b>Tené en cuenta:</b>
         <ul>
           <li>Lo que se paga una vez por mes (luz, agua, seguro, internet, alarma, teléfono, Elistar) toma lo real si ya se pagó y, si no, lo del mes anterior.</li>
-          <li>Un débito de Chase sin categoría va a "Sin categoría en Chase". Categorizalo en Chase para que vaya a su renglón.</li>
+          <li>Sueldos, rebates y Food Truck entran de golpe: hasta completar el mes, el mayor entre lo del mes y el mes anterior. Lo demás se proyecta al ritmo recién con 15 días cargados; antes, el mayor entre lo del mes y el mes anterior.</li>
+          <li>Un débito de Chase sin categoría queda abajo, como pendiente, y no entra en la utilidad neta. Categorizalo en Chase para que vaya a su renglón.</li>
           <li>Con el Bce del mes cargado, aparece la columna con lo real.</li>
           <li>Con el cursor encima de un importe se ve cómo se calculó (por ejemplo, lo pagado ÷ días cargados × días del mes).</li>
         </ul>
