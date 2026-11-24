@@ -68,6 +68,7 @@
   .chase-detalle-cell { min-width: 240px; }
   .chase-detalle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .chase-detalle-note { font-size: 11.5px; color: var(--text-soft); margin-top: 3px; }
+  .chase-new-account { display: flex; flex-direction: column; gap: 6px; }
 
   /* "corregir"/"categorizar" -- pedido explícito del usuario (2026-09-16):
      antes era un <details> que empujaba el resto del extracto hacia abajo
@@ -114,9 +115,6 @@
   <h1>Movimientos guardados</h1>
   <p class="page-subtitle">Todo lo ya categorizado y guardado de este mes. Podés cargar el extracto completo del mes de una vez, o de a poco (un rango corto por vez) — no se duplica nada. Un movimiento sin ninguna regla que lo categorice se puede corregir a mano acá abajo.</p>
 </div>
-<datalist id="chase-detalle-options">
-  {% for value in known_details %}<option value="{{ value }}">{% endfor %}
-</datalist>
 
 <div class="card">
   <div class="historial-nav">
@@ -192,7 +190,22 @@
                 <input type="hidden" name="month" value="{{ month }}">
                 <input type="hidden" name="current_detalle" value="{{ tx.detalle or '' }}">
                 <input type="hidden" name="current_supplier_key" value="{{ tx.supplier_key or '' }}">
-                <input type="text" name="detalle" value="{{ tx.detalle or '' }}" list="chase-detalle-options" placeholder="Detalle">
+                {# Solo cuentas de la lista (2026-11-24); una nueva, creando la regla. #}
+                <select name="detalle" class="chase-detalle-select" aria-label="Cuenta">
+                  <option value="">— Sin categoría —</option>
+                  {% if tx.detalle and tx.detalle not in known_details %}<option value="{{ tx.detalle }}" selected>{{ tx.detalle }}</option>{% endif %}
+                  {% for value in known_details %}
+                  <option value="{{ value }}" {{ 'selected' if tx.detalle == value else '' }}>{{ value }}</option>
+                  {% endfor %}
+                  {% if current_user.is_admin %}<option value="__nueva__">+ Cuenta nueva (crea una regla)…</option>{% endif %}
+                </select>
+                {% if current_user.is_admin %}
+                <div class="chase-new-account" hidden>
+                  <input type="text" name="new_detalle" placeholder="Nombre de la cuenta" aria-label="Nombre de la cuenta nueva">
+                  <input type="text" name="rule_keyword" value="{{ tx.description }}" aria-label="Palabra clave de la regla">
+                  <div class="chase-detalle-note">La regla categoriza con esta cuenta todo movimiento cuya descripción tenga esa palabra clave. Dejá solo la parte que se repite (sin fechas ni números de operación).</div>
+                </div>
+                {% endif %}
                 <select name="supplier_key">
                   <option value="">— Proveedor: ninguno —</option>
                   {% for entry in supplier_options %}
@@ -213,4 +226,15 @@
   {% endif %}
 </div>
 {% include "_table_filters.html" %}
+<script>
+  // "Cuenta nueva": se piden el nombre y la palabra clave de la regla.
+  document.addEventListener('change', function (event) {
+    const select = event.target.closest && event.target.closest('.chase-detalle-select');
+    if (!select) return;
+    const box = select.form.querySelector('.chase-new-account');
+    if (!box) return;
+    box.hidden = select.value !== '__nueva__';
+    box.querySelectorAll('input').forEach(function (input) { input.required = !box.hidden; });
+  });
+</script>
 {% endblock %}

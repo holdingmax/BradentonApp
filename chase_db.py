@@ -226,9 +226,9 @@ def upsert_transactions(rows, source_filename=None):
                     type = excluded.type,
                     source_filename = excluded.source_filename,
                     updated_at = excluded.updated_at,
-                    detalle = CASE WHEN chase_transactions.detalle_source IN ('manual', 'deposito')
+                    detalle = CASE WHEN chase_transactions.detalle_source IN ('manual', 'deposito', 'eft')
                                    THEN chase_transactions.detalle ELSE excluded.detalle END,
-                    detalle_source = CASE WHEN chase_transactions.detalle_source IN ('manual', 'deposito')
+                    detalle_source = CASE WHEN chase_transactions.detalle_source IN ('manual', 'deposito', 'eft')
                                           THEN chase_transactions.detalle_source ELSE excluded.detalle_source END,
                     supplier_key = CASE WHEN chase_transactions.supplier_source = 'manual'
                                         THEN chase_transactions.supplier_key ELSE excluded.supplier_key END,
@@ -410,7 +410,8 @@ def recategorize_all(categorize_fn, resolve_supplier_fn):
         now = datetime.utcnow().isoformat()
         for row in rows:
             updates = {}
-            if row["detalle_source"] not in ("manual", "deposito"):
+            # "eft": el N° de RCV que puso su EFT cargado (chase_eft.py).
+            if row["detalle_source"] not in ("manual", "deposito", "eft"):
                 new_detalle = categorize_fn(row["description"], row["amount"])
                 if new_detalle != row["detalle"]:
                     updates["detalle"] = new_detalle
@@ -498,14 +499,49 @@ def set_deposit_detalle(rowid, detalle):
         conn.close()
 
 
-def list_known_details():
-    """Detalle ya usados alguna vez (cualquier mes) -- para sugerir en el form de categorización manual."""
+def list_known_details(since=None):
+    """
+    Detalle ya usados (desde `since`, "AAAA-MM-DD", o de siempre): la lista
+    de cuentas para categorizar a mano. Los EFT con su N° de RCV cuentan como
+    uno solo, "EFT RCV-".
+    """
     conn = _connect()
     try:
-        cur = conn.execute(
-            "SELECT DISTINCT detalle FROM chase_transactions WHERE detalle IS NOT NULL AND detalle != '' ORDER BY detalle"
+        sql = "SELECT DISTINCT detalle FROM chase_transactions WHERE detalle IS NOT NULL AND detalle != ''"
+        params = ()
+        if since:
+            sql += " AND posting_date >= ?"
+            params = (since,)
+        cur = conn.execute(sql + " ORDER BY detalle", params)
+        details = {row[0] for row in cur.fetchall()}
+    finally:
+        conn.close()
+    return sorted({"EFT RCV-" if d.upper().startswith("EFT RCV-") else d for d in details})
+
+
+def eft_rows(prefix):
+    """Los movimientos cuyo Detalle empieza con `prefix` ("EFT RCV-"), sin los corregidos a mano."""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT rowid AS _rowid, posting_date, amount, detalle, detalle_source FROM chase_transactions "
+            "WHERE detalle LIKE ? AND (detalle_source IS NULL OR detalle_source != 'manual') ORDER BY rowid",
+            (prefix + "%",),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def set_eft_detalle(rowid, detalle, source):
+    """El Detalle de un pago de J.H. con su N° de RCV (source "eft") o de vuelta al de la regla ("rule")."""
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE chase_transactions SET detalle = ?, detalle_source = ?, updated_at = ? WHERE rowid = ?",
+            (detalle, source, datetime.utcnow().isoformat(), rowid),
         )
-        return [row[0] for row in cur.fetchall()]
+        conn.commit()
     finally:
         conn.close()
 
@@ -590,14 +626,18 @@ def get_posting_dates(first, last):
     return {date.fromisoformat(row["posting_date"]) for row in rows}
 
 
-def get_detalle_transactions(detalle, first, last):
-    """[(fecha date, monto)] de los movimientos con ese Detalle entre first y last (date), inclusive."""
+def get_detalle_transactions(detalle, first, last, prefix=False):
+    """
+    [(fecha date, monto)] de los movimientos con ese Detalle entre first y
+    last (date), inclusive. Con `prefix`, los que empiezan con él (los EFT
+    con su N° de RCV, ver chase_eft.py).
+    """
     conn = _connect()
     try:
         rows = conn.execute(
-            "SELECT posting_date, amount FROM chase_transactions WHERE detalle = ? AND posting_date BETWEEN ? AND ? "
-            "ORDER BY posting_date, description, amount, occurrence",
-            (detalle, first.isoformat(), last.isoformat()),
+            f"SELECT posting_date, amount FROM chase_transactions WHERE detalle {'LIKE' if prefix else '='} ? "
+            "AND posting_date BETWEEN ? AND ? ORDER BY posting_date, description, amount, occurrence",
+            (detalle + "%" if prefix else detalle, first.isoformat(), last.isoformat()),
         ).fetchall()
     finally:
         conn.close()

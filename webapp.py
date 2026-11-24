@@ -85,7 +85,9 @@ from chase_rules import (
     edit_master_rule_by_index as edit_chase_master_rule,
     extract_chase_transactions,
     list_display_rules as list_chase_display_rules,
+    normalize_rule_text as normalize_chase_rule_text,
 )
+import chase_eft
 import caja_db
 import gastos_caja
 from caja import (
@@ -3905,6 +3907,7 @@ def chase():
     skipped = total_rows - len(rows)
     # Los recibos de Ice Machine ya cargados categorizan sus depósitos.
     linked = _link_ice_deposits_to_chase()
+    chase_eft.link_eft_rcv()
     uncategorized = max(0, sum(1 for row in rows if not row["detalle"]) - linked)
 
     parts = [f"{len(rows)} movimiento(s) guardado(s) ({inserted} nuevo(s), {updated} actualizado(s))."]
@@ -4032,6 +4035,8 @@ def chase_historial():
     if not (1 <= month <= 12):
         month = today.month
 
+    # Los EFT de J.H. con su N° de RCV si ya llegaron (chase_eft.py).
+    chase_eft.link_eft_rcv()
     transactions = chase_db.get_month_transactions(year, month)
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
     next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
@@ -4057,7 +4062,7 @@ def chase_historial():
         # "DEPOSITO VENTA ICE" siempre disponible para elegir a mano -- esos
         # depósitos chicos ya no se categorizan solos (ver
         # chase_rules._split_small_deposit), así que puede no estar usado todavía.
-        known_details=sorted(set(chase_db.list_known_details()) | {"DEPOSITO VENTA ICE", CHASE_DETALLE_VACCUMMS}),
+        known_details=_chase_accounts(year),
         supplier_options=supplier_options,
         supplier_labels=supplier_labels,
         **THEME_BY_KEY["carga_chase"],
@@ -4086,6 +4091,27 @@ def chase_exportar():
     dest_path = os.path.join(workspace_dir, f"Chase {month:02d}-{year}.xlsx")
     build_chase_export_workbook(transactions, year, month, dest_path)
     return send_file(dest_path, as_attachment=True, download_name=os.path.basename(dest_path))
+
+
+def _chase_accounts(year=None):
+    """
+    Las cuentas para categorizar Chase a mano (pedido del usuario,
+    2026-11-24): las que se usaron en Chase desde el 1 de enero del año, más
+    las que ponen los recibos de depósito. Solo se elige de esta lista; una
+    cuenta nueva entra creando una regla.
+    """
+    year = year or date.today().year
+    return sorted(set(chase_db.list_known_details(f"{year:04d}-01-01"))
+                  | {"DEPOSITO VENTA ICE", CHASE_DETALLE_VACCUMMS, CHASE_DETALLE_FOOD_TRUCK, "PROVEEDORES"})
+
+
+def _match_chase_account(text, accounts):
+    """La cuenta de la lista que es `text` escrita de otra forma (mayúsculas, acentos, espacios), o None."""
+    key = normalize_chase_rule_text(text)
+    for account in accounts:
+        if normalize_chase_rule_text(account) == key:
+            return account
+    return None
 
 
 @app.route("/carga-datos/chase/categorizar", methods=["POST"])
@@ -4136,6 +4162,38 @@ def chase_categorizar():
     except ValueError:
         flash("No se pudo identificar el movimiento (monto inválido).", "error")
         return redirect(url_for("chase_historial", year=year, month=month))
+
+    # Solo cuentas de la lista (pedido del usuario, 2026-11-24: "que alguien
+    # no pueda venir a escribir palabras sueltas"). Una cuenta nueva entra
+    # creando una regla para ese movimiento; escrita como una que ya está,
+    # vale la de la lista.
+    accounts = _chase_accounts(year)
+    if detalle == "__nueva__":
+        if not _require_admin("Solo un administrador puede crear una cuenta nueva (es una regla de Chase)."):
+            return redirect(url_for("chase_historial", year=year, month=month))
+        new_name = (request.form.get("new_detalle") or "").strip()
+        keyword = (request.form.get("rule_keyword") or "").strip()
+        if not new_name or not keyword:
+            flash("Para una cuenta nueva hacen falta el nombre de la cuenta y la palabra clave de la regla.", "error")
+            return redirect(url_for("chase_historial", year=year, month=month))
+        detalle = _match_chase_account(new_name, accounts) or " ".join(new_name.upper().split())
+        try:
+            add_chase_rule(keyword, detalle)
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("chase_historial", year=year, month=month))
+        _recategorize_all_chase_and_flash()
+        # Este movimiento queda con la cuenta aunque ya estuviera corregido a mano.
+        chase_db.set_manual_detalle(posting_date, description, amount, detalle)
+        if categorize_chase_description(description, amount) != detalle:
+            flash("La regla se creó, pero su palabra clave no aparece en este movimiento: lo categoricé a mano.", "warning")
+        return redirect(url_for("chase_historial", year=year, month=month))
+    if detalle and detalle not in accounts and detalle != current_detalle:
+        matched = _match_chase_account(detalle, accounts)
+        if not matched:
+            flash("Elegí una cuenta de la lista (o \"Cuenta nueva\", que crea una regla).", "error")
+            return redirect(url_for("chase_historial", year=year, month=month))
+        detalle = matched
 
     if supplier_key and not current_detalle and not detalle:
         detalle = "PROVEEDORES"
@@ -6300,6 +6358,7 @@ def _run_carga_datos_eft_job(job_id, pdf_paths):
                     duplicates += 1
                 else:
                     eft_db.save_eft(header_data, paid_invoices, credit_coupons, source_filename=filename)
+                    chase_eft.link_eft_rcv()
                     saved += 1
                     missing_ddc_total += sum(1 for c in credit_coupons if not c.get("coupon"))
                     skipped_total += skipped_coupon_rows or 0
@@ -6615,6 +6674,7 @@ def carga_datos_eft_eliminar(deposit_id):
     year = request.form.get("year", type=int)
     month = request.form.get("month", type=int)
     ok = eft_db.delete_deposit(deposit_id)
+    chase_eft.link_eft_rcv()
     flash("EFT eliminado." if ok else "Ese EFT ya no existe.", "success" if ok else "error")
     return redirect(url_for("carga_datos_eft_historial", year=year, month=month))
 

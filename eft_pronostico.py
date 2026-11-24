@@ -464,7 +464,7 @@ def build_forecast(today=None):
     charges = [c for c in _recurring_charges(history, today) if round(c["amount"], 2) not in misc_amounts]
     chase_last = chase_db.get_last_posting_date()
     chase_moves = chase_db.get_detalle_transactions(EFT_DETALLE, last["date"] + timedelta(days=1),
-                                                    today + timedelta(days=HORIZON_DAYS)) if chase_last else []
+                                                    today + timedelta(days=HORIZON_DAYS), prefix=True) if chase_last else []
 
     events = []
     used_moves, consumed, taken, misc_taken = [], set(), set(), set()
