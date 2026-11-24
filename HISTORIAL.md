@@ -2980,3 +2980,15 @@ Siete pedidos de Alfonso en un mensaje (el último, pasarlo a producción "como 
 - **Márgenes por mes**: `proyecciones.margins_for_month` / `save_margins`, en `config_store.PROYECCIONES_MARGENES` (tabla `ajustes`, clave `proyecciones_margenes`, sin migración). Guardar en un mes vale para ese y los siguientes (borra los cambios posteriores); los anteriores siguen con lo de antes (la tabla vieja `department_margins` como base, y si no, el Excel). Kia/Toyota fijo en 100 %.
 - **Lottery con % teórico** (Alfonso eligió "Manda el % teórico"): utilidad = venta de LOTTO × %, editable como los demás; la comisión real queda como referencia en el renglón y en la nota. También en el desglose de utilidad neta.
 - Probado: pytest (102, `tests/test_proyecciones_margenes.py`), test client y navegador sobre una copia de los datos. No se probó en el Postgres local (Docker apagado).
+
+## 2026-11-24 (noche): Proyecciones, bloque 1 de la revisión (`23c5185`, en dev y producción)
+
+Una revisión del Panel (pegada por Alfonso) marcó 8 puntos; se hizo el bloque 1:
+- **Sin categoría en Chase** fuera de la utilidad neta: pendiente aparte (aviso en el Panel con link al mes de Chase, renglón en cursiva al pie del desglose). Podían ser pagos de J.H. ya contados por el PPP.
+- **Mínimo de días** (`proyecciones_neta.MIN_DAYS = 15`): antes, el mayor entre lo del mes y el mes anterior (`_at_pace`); vale para Chase, fees de Cupones y Caja. `UNTIL_COMPLETE` (sueldos, rebates, Food Truck; reemplaza a `FIXED`): el mayor con el mes anterior hasta completar el mes.
+- **Margen de ventas**: el gráfico (combustible + C-Store con Lottery) se llama así; cuadro "De la venta a la utilidad neta" con `net.bridge` (margen de ventas + otros ingresos − fees = utilidad bruta − gastos = neta).
+- **Fechas de corte con semáforo** (`proyecciones_neta.freshness`: ≤2 días verde, ≤6 ámbar, más o sin datos rojo) en el Panel y en Utilidad neta.
+- Texto de arriba corregido. Pruebas: `tests/test_proyecciones_neta.py`.
+- **Bloque 2** (`7107b33`): venta del C-Store "bruta de descuentos" con renglón de Desc. Otros (no se resta); % en azul con "supuesto" (Alfonso: que queden en la página); una "i" al lado de cada `data-formula` que abre el cartel con clic o toque (`base.html`, `button.formula-i` en `base.css`); "Ver los movimientos" con la lista de lo sin categoría.
+- **Bloque 3** (`a055a8a`): mes anterior y variación % en Combustible, C-Store por rubro (`proyecciones.previous_month`) y el desglose (`build_net(..., with_previous=True)`, solo en esa página); sin la torta ni el Resumen del mes (Chart.js ya no se carga en el Panel).
+- Los tres bloques, en dev y producción. Falta mirarlo con los datos de noviembre en producción.
