@@ -1214,7 +1214,14 @@ a[aria-busy="true"] { opacity: 0.55; pointer-events: none; }
    un elemento con data-formula (pedido del usuario, 2026-11-24; Panel de
    proyecciones). Es uno solo para toda la página, fuera de las tablas, así
    un contenedor con overflow no lo corta. */
-[data-formula] { text-decoration: underline dotted rgba(107, 114, 128, 0.55); text-underline-offset: 3px; }
+[data-formula] { text-decoration: underline dotted rgba(75, 85, 99, 0.8); text-underline-offset: 3px; }
+/* El "i" que abre el cartel con un clic o un toque (2026-11-24). */
+button.formula-i {
+  display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; min-width: 0; min-height: 0;
+  margin: 0 0 0 4px; padding: 0; border: 1px solid currentColor; border-radius: 50%; background: transparent; box-shadow: none;
+  color: inherit; opacity: 0.55; font: italic 700 9.5px/1 Georgia, serif; vertical-align: 2px; transform: none;
+}
+button.formula-i:hover, button.formula-i:focus-visible { opacity: 1; background: transparent; transform: none; }
 .formula-tip {
   position: fixed; z-index: 2000; max-width: 380px; padding: 9px 12px;
   background: #111827; color: #F9FAFB; border-radius: 8px; box-shadow: 0 8px 24px rgba(17, 24, 39, 0.25);

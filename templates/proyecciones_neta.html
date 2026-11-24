@@ -38,6 +38,8 @@
   .proy-source.bad i { background: var(--error); }
   .proy-source.bad { border-color: #FECACA; background: #FEF2F2; }
   .proy-sources-note { flex-basis: 100%; text-align: center; color: var(--error); font-weight: 600; }
+  .neta-pending-list { margin-top: 4px; font-style: normal; }
+  .neta-pending-list summary { font-weight: 600; }
   .neta-pending td { color: var(--text-soft); font-style: italic; border-top: 1px dashed var(--border); }
 </style>
 {% endblock %}
@@ -166,7 +168,10 @@
         {% if n.pending.count %}
         <tr class="neta-pending">
           <td>Sin categoría en Chase (pendiente)</td>
-          <td class="neta-col-src">{{ n.pending.count }} débito{{ '' if n.pending.count == 1 else 's' }} sin categoría: no entran en la utilidad neta hasta que se categoricen en <a href="{{ url_for('chase_historial', year=year, month=month) }}">Chase</a>.</td>
+          <td class="neta-col-src">{{ n.pending.count }} débito{{ '' if n.pending.count == 1 else 's' }} sin categoría: no entran en la utilidad neta hasta que se categoricen en <a href="{{ url_for('chase_historial', year=year, month=month) }}">Chase</a>.
+            <details class="neta-pending-list"><summary>Ver los movimientos</summary>
+              {% for it in n.pending["items"] %}<div>{{ it.date[8:10] }}/{{ it.date[5:7] }} · {{ it.description }} · {{ money(it.amount) }}</div>{% endfor %}
+            </details></td>
           <td>{{ neg(n.pending.amount) }}</td><td>—</td>
           {% if n.has_bce %}<td></td>{% endif %}
         </tr>

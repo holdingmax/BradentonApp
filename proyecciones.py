@@ -178,6 +178,7 @@ def _month_days(year, month):
             "lotto": by_group.get("LOTERY/LOTTO", 0.0),
             "kia": by_group.get("Gettel", 0.0),
             "total": fuel_sales + cstore,
+            "desc_otros": row.get("desc_otros") or 0.0,
         })
     return days
 
@@ -235,6 +236,11 @@ def _summary(year, month, days, margins, upto=None):
     for block in (cstore["total"], cstore["balance"]):
         block["margin"] = _ratio(block["utilidad"], block["amount"])
         block["margin_proj"] = _ratio(block["utilidad_proj"], block["proj"])
+    # Los descuentos del C-Store (Desc. Otros de Store Info): la venta por rubro
+    # es bruta de ellos y los % se aplican sobre esa venta bruta, como el Excel
+    # (2026-11-24: que se vea).
+    discounts = sum(d.get("desc_otros", 0.0) for d in days)
+    cstore["discounts"] = {"amount": discounts, "proj": _project(discounts, loaded, days_in_month)}
 
     return {
         "days_in_month": days_in_month,

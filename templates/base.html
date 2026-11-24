@@ -2270,12 +2270,41 @@
         current = null;
         if (tip) tip.classList.remove('show');
       }
+      // Un "i" al lado de cada número con su cuenta, que abre el cartel con
+      // un clic o un toque (2026-11-24: en el celular no hay cursor).
+      let pinned = false;
+      function addIcons() {
+        document.querySelectorAll('[data-formula]').forEach(function (el) {
+          if (el.hasAttribute('data-fx-icon') || !el.getAttribute('data-formula')) return;
+          el.setAttribute('data-fx-icon', '');
+          const icon = document.createElement('button');
+          icon.type = 'button';
+          icon.className = 'formula-i';
+          icon.textContent = 'i';
+          icon.setAttribute('aria-label', 'Cómo se calcula');
+          el.insertAdjacentElement('afterend', icon);
+        });
+      }
+      addIcons();
+      document.addEventListener('click', function (event) {
+        const icon = event.target.closest && event.target.closest('.formula-i');
+        if (icon) {
+          event.preventDefault();
+          event.stopPropagation();
+          const target = icon.previousElementSibling;
+          if (pinned && current === target) { pinned = false; hide(); return; }
+          if (target) { show(target); pinned = true; }
+          return;
+        }
+        if (pinned) { pinned = false; hide(); }
+      }, true);
       document.addEventListener('mouseover', function (event) {
+        if (pinned) return;
         const target = event.target.closest && event.target.closest('[data-formula]');
         if (target && target !== current && target.getAttribute('data-formula')) show(target);
         else if (!target && current) hide();
       });
-      document.addEventListener('scroll', hide, true);
+      document.addEventListener('scroll', function () { pinned = false; hide(); }, true);
     })();
   </script>
 </body>

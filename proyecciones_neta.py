@@ -257,7 +257,7 @@ def build_net(year, month, projection=None):
 
     rubros = [r for r in p["cstore"]["rubros"] if r["in_balance"]]
     cstore = _group("C-Store", [
-        _line(r["display"], f"Close Store × {r['margin'] * 100:.0f} %", r["utilidad"], r["utilidad_proj"], formula={
+        _line(r["display"], f"Close Store × {r['margin'] * 100:.0f} % (supuesto)", r["utilidad"], r["utilidad_proj"], formula={
             "actual": f"Vendido {_money(r['amount'])} × {r['margin'] * 100:.2f} % = {_money(r['utilidad'])}",
             "proj": (f"Proyectado {_money(r['proj'])} × {r['margin'] * 100:.2f} % = {_money(r['utilidad_proj'])}"
                      if r["proj"] is not None else None),
@@ -269,7 +269,7 @@ def build_net(year, month, projection=None):
     # Lottery por su % teórico, como en el Panel (pedido del usuario, 2026-11-24).
     lotto = next(r for r in p["cstore"]["rubros"] if r.get("lottery"))
     lottery = _group("Lottery", [_line(
-        "Venta de LOTTO", f"Close Store × {lotto['margin'] * 100:.2f} %", lotto["utilidad"], lotto["utilidad_proj"],
+        "Venta de LOTTO", f"Close Store × {lotto['margin'] * 100:.2f} % (supuesto)", lotto["utilidad"], lotto["utilidad_proj"],
         formula={"actual": f"Vendido {_money(lotto['amount'])} × {lotto['margin'] * 100:.2f} % = {_money(lotto['utilidad'])}",
                  "proj": (f"Proyectado {_money(lotto['proj'])} × {lotto['margin'] * 100:.2f} % = {_money(lotto['utilidad_proj'])}"
                           if lotto["proj"] is not None else None)})],
@@ -325,7 +325,10 @@ def build_net(year, month, projection=None):
     # hasta que se categorice (2026-11-24).
     uncategorized = [tx for tx in chase_db.get_month_transactions(year, month)
                      if not (tx.get("detalle") or "") and (tx.get("amount") or 0.0) < 0]
-    pending = {"amount": -sum(tx.get("amount") or 0.0 for tx in uncategorized) + 0.0, "count": len(uncategorized)}
+    pending = {"amount": -sum(tx.get("amount") or 0.0 for tx in uncategorized) + 0.0, "count": len(uncategorized),
+               "items": [{"date": str(tx.get("posting_date") or tx.get("date") or "")[:10],
+                          "description": tx.get("description") or "", "amount": tx.get("amount") or 0.0}
+                         for tx in uncategorized]}
     expenses = _group("Gastos", expense_lines, bce=bce("gastos_directos", "otros_gastos", sign=-1))
 
     def add(groups, field):
