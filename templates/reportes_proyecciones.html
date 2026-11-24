@@ -8,7 +8,9 @@
   .historial-table-wrap { overflow-x: auto; margin-top: 16px; border: 1px solid var(--border); border-radius: 10px; }
   .historial-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
   .historial-table th, .historial-table td { padding: 8px 14px; text-align: left; white-space: nowrap; }
-  .historial-table thead th { background: var(--accent-soft); font-weight: 700; border-bottom: 1px solid var(--border); vertical-align: bottom; }
+  .historial-table thead th { background: var(--accent-soft); font-weight: 700; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  /* Títulos de los cuadros centrados (pedido del usuario, 2026-11-24); el de la primera columna, a la izquierda. */
+  .proy-num-table thead th:not(:first-child), .proy-bridge thead th:not(:first-child) { text-align: center !important; }
   .historial-table tbody tr:nth-child(even) { background: var(--surface-alt); }
   .reporte-totals-row td { font-weight: 700; background: var(--surface-alt); border-top: 2px solid var(--border); }
   .proy-num-table th:not(:first-child), .proy-num-table td:not(:first-child) { text-align: right; }
@@ -75,15 +77,7 @@
   .proy-actions { margin-top: 12px; }
   .proy-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
   .proy-upload .muted { font-size: 12.5px; }
-  /* Fechas de corte de cada fuente, con semáforo (2026-11-24). */
-  .proy-sources { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 12.5px; }
-  .proy-source { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); }
-  .proy-source i { width: 9px; height: 9px; border-radius: 50%; background: var(--text-soft); }
-  .proy-source.ok i { background: var(--success); }
-  .proy-source.late i { background: #D97706; }
-  .proy-source.bad i { background: var(--error); }
-  .proy-source.bad { border-color: #FECACA; background: #FEF2F2; }
-  .proy-sources-note { flex-basis: 100%; color: var(--error); font-weight: 600; }
+  .proy-upload button { margin-top: 0; }
   .proy-pending-list { margin-top: 8px; }
   .proy-pending-list summary { font-weight: 600; }
   .proy-pending-list table { margin-top: 8px; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
@@ -154,15 +148,6 @@
       {% if p.last_day %}<span class="muted">(el último, {{ p.last_day.strftime('%d/%m') }})</span>{% endif %}
     </div>
     <div class="proy-days-bar"><div class="proy-days-bar-fill" style="width: {{ (p.days_loaded / p.days_in_month * 100) if p.days_in_month else 0 }}%;"></div></div>
-    {# Hasta qué día está cargada cada fuente, con semáforo (2026-11-24). #}
-    <div class="proy-sources">
-      {% for src in net.sources %}
-      <span class="proy-source {{ src.status or '' }}" title="{{ {'ok': 'Al día', 'late': 'Atrasada', 'bad': 'Muy atrasada o sin datos del mes'}.get(src.status, '') }}"><i></i>{{ src.name }}: {{ src.last.strftime('%d/%m') if src.last else 'sin datos' }}</span>
-      {% endfor %}
-      {% if net.sources|selectattr("status", "equalto", "bad")|list %}
-      <span class="proy-sources-note">Con fuentes atrasadas la proyección no es confiable: cargá lo que falta.</span>
-      {% endif %}
-    </div>
   </div>
 </div>
 

@@ -8,7 +8,8 @@
   .historial-table-wrap { overflow-x: auto; margin-top: 4px; border: 1px solid var(--border); border-radius: 10px; }
   .historial-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
   .historial-table th, .historial-table td { padding: 7px 14px; text-align: left; white-space: nowrap; }
-  .historial-table thead th { background: var(--accent-soft); font-weight: 700; border-bottom: 1px solid var(--border); }
+  .historial-table thead th { background: var(--accent-soft); font-weight: 700; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .neta-table thead th:nth-child(n+3) { text-align: center !important; }
   .card > h2 { margin-bottom: 16px; }
 
   .neta-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 18px; }
@@ -30,14 +31,6 @@
   .neta-net td { font-weight: 700; font-size: 15px; background: var(--accent-soft); border-top: 2px solid var(--accent); }
   .neta-note { font-size: 12.5px; margin: 12px 0 0; line-height: 1.5; }
   .neta-warn { margin: 0 0 12px; color: var(--error); font-size: 13px; }
-  .proy-sources { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 12px; font-size: 12.5px; }
-  .proy-source { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); }
-  .proy-source i { width: 9px; height: 9px; border-radius: 50%; background: var(--text-soft); }
-  .proy-source.ok i { background: var(--success); }
-  .proy-source.late i { background: #D97706; }
-  .proy-source.bad i { background: var(--error); }
-  .proy-source.bad { border-color: #FECACA; background: #FEF2F2; }
-  .proy-sources-note { flex-basis: 100%; text-align: center; color: var(--error); font-weight: 600; }
   .neta-prev { color: var(--text-soft); border-left: 1px solid var(--border); }
   .neta-up { color: var(--success); font-weight: 600; }
   .neta-down { color: var(--error); font-weight: 600; }
@@ -76,14 +69,7 @@
     </div>
     <a href="{{ url_for('proyecciones_utilidad_neta', year=next_year, month=next_month) }}" class="btn-secondary historial-nav-btn">Mes siguiente &rarr;</a>
   </div>
-  <div class="proy-sources">
-    {% for src in n.sources %}
-    <span class="proy-source {{ src.status or '' }}"><i></i>{{ src.name }}: {{ src.last.strftime('%d/%m') if src.last else 'sin datos' }}</span>
-    {% endfor %}
-    {% if n.sources|selectattr("status", "equalto", "bad")|list %}
-    <span class="proy-sources-note">Con fuentes atrasadas la proyección no es confiable: cargá lo que falta.</span>
-    {% endif %}
-  </div>
+  
 </div>
 
 {# El cartel con la cuenta al pasar el cursor (data-formula, ver base.html). #}

@@ -60,6 +60,11 @@
   .caja-saldo-form > div { display: flex; flex-direction: column; gap: 4px; }
   .caja-saldo-form input[type=number] { padding: 6px 8px; width: 160px; }
   .caja-saldo-hint { font-size: 11px; }
+  /* Campos y botón del mismo alto y alineados abajo (2026-11-24). */
+  :is(.caja-saldo-form, .caja-expense-form) input { height: 38px; box-sizing: border-box; margin: 0; }
+  :is(.caja-saldo-form, .caja-expense-form) label.muted { margin: 0; }
+  :is(.caja-saldo-form, .caja-expense-form) > button { margin: 0; height: 38px; padding-top: 0; padding-bottom: 0; }
+  .caja-saldo-form > .caja-saldo-hint { align-self: center; }
 
   .caja-expense-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; }
   .caja-expense-form > div { display: flex; flex-direction: column; gap: 4px; }
